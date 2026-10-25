@@ -1,0 +1,9 @@
+{
+  "name": "@tellall/engine",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@trustnxt/c2pa-ts": "0.14.1",
+    "reflect-metadata": "0.2.2"
+  }
+}

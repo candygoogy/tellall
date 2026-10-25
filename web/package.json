@@ -1,0 +1,11 @@
+{
+  "name": "@tellall/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite spike"
+  },
+  "devDependencies": {
+    "vite": "8.3.4"
+  }
+}

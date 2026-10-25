@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>tellall spike: paste probe</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+      #box { border: 2px dashed #888; padding: 1.5rem; min-height: 4rem; }
+      #box:focus { outline: 2px solid #36c; }
+      pre { white-space: pre-wrap; word-break: break-all; background: #f4f4f4; padding: 0.75rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Paste probe</h1>
+    <p id="note">
+      Copy a ChatGPT answer with its copy button, click the box below and paste
+      (Ctrl+V). Every clipboard type and its full data is listed underneath. Look
+      for the chat link or a <code>SourceURL</code> line. Nothing leaves this page.
+    </p>
+    <div id="box" contenteditable="true">Paste here</div>
+    <div id="types"></div>
+    <script type="module">
+      const box = document.getElementById("box");
+      const list = document.getElementById("types");
+      box.addEventListener("paste", (e) => {
+        e.preventDefault();
+        const data = e.clipboardData;
+        list.replaceChildren();
+        const types = [...data.types];
+        const summary = document.createElement("p");
+        summary.textContent = types.length + " type(s): " + types.join(", ");
+        list.append(summary);
+        for (const type of types) {
+          const h = document.createElement("h2");
+          h.textContent = type;
+          const pre = document.createElement("pre");
+          const text = data.getData(type);
+          // textContent: shown escaped, never parsed as HTML.
+          pre.textContent = text === "" ? "(empty string from getData)" : text;
+          list.append(h, pre);
+        }
+        for (const file of data.files) {
+          const p = document.createElement("p");
+          p.textContent = "file: " + file.name + " (" + file.type + ", " + file.size + " bytes)";
+          list.append(p);
+        }
+      });
+    </script>
+  </body>
+</html>

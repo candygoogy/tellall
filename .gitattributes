@@ -1,0 +1,2 @@
+# Fixtures are byte-exact captures (clipboard offsets depend on CRLF); never convert line endings.
+fixtures/** -text

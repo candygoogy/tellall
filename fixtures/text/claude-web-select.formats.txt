@@ -1,0 +1,7 @@
+HTML Format
+CF_UNICODETEXT
+Chromium internal source RFH token
+Chromium internal source URL
+CF_LOCALE
+CF_TEXT
+CF_OEMTEXT
