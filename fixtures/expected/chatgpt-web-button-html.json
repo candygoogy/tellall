@@ -1,0 +1,22 @@
+{
+  "name": "Pasted text",
+  "format": "text",
+  "headline": "This copy carries the page's address.",
+  "findings": [
+    {
+      "group": "copy-extras",
+      "kind": "private",
+      "sentence": "The browser added the page's address to this copy: https://chatgpt.com/c/00000000-0000-0000-0000-000000000000. Apps like Word and OneNote can keep it when you paste.",
+      "fields": [
+        {
+          "name": "SourceURL",
+          "value": "https://chatgpt.com/c/00000000-0000-0000-0000-000000000000",
+          "from": "HTML clipboard header"
+        }
+      ],
+      "cleanedBy": "clean"
+    }
+  ],
+  "empty": false,
+  "anatomy": []
+}

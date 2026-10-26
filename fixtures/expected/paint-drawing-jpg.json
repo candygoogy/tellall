@@ -1,0 +1,27 @@
+{
+  "name": "paint-drawing.jpg",
+  "format": "jpeg",
+  "headline": "No marks found. That doesn't prove anything: many apps and sites strip them.",
+  "findings": [],
+  "empty": true,
+  "anatomy": [
+    {
+      "part": "header",
+      "offset": 0,
+      "length": 609,
+      "note": "File signature, JFIF header, Decoding tables, Image header"
+    },
+    {
+      "part": "pixels",
+      "offset": 609,
+      "length": 111304,
+      "note": "Picture data"
+    },
+    {
+      "part": "other",
+      "offset": 111913,
+      "length": 2,
+      "note": "End"
+    }
+  ]
+}

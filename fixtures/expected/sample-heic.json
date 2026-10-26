@@ -1,0 +1,46 @@
+{
+  "name": "sample.heic",
+  "format": "heic",
+  "headline": "This file gives away 1 kind of personal data.",
+  "findings": [
+    {
+      "group": "device",
+      "kind": "private",
+      "sentence": "It names the camera: Example Cam 1.",
+      "fields": [
+        {
+          "name": "Make",
+          "value": "Example",
+          "from": "Exif"
+        },
+        {
+          "name": "Model",
+          "value": "Cam 1",
+          "from": "Exif"
+        }
+      ],
+      "cleanedBy": "clean"
+    }
+  ],
+  "empty": false,
+  "anatomy": [
+    {
+      "part": "header",
+      "offset": 0,
+      "length": 307,
+      "note": "File signature, Item table"
+    },
+    {
+      "part": "pixels",
+      "offset": 307,
+      "length": 311,
+      "note": "Picture data"
+    },
+    {
+      "part": "metadata",
+      "offset": 618,
+      "length": 228,
+      "note": "Exif"
+    }
+  ]
+}

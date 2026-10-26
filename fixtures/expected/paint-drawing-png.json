@@ -1,0 +1,33 @@
+{
+  "name": "paint-drawing.png",
+  "format": "png",
+  "headline": "No marks found. That doesn't prove anything: many apps and sites strip them.",
+  "findings": [],
+  "empty": true,
+  "anatomy": [
+    {
+      "part": "header",
+      "offset": 0,
+      "length": 33,
+      "note": "File signature, Image header"
+    },
+    {
+      "part": "other",
+      "offset": 33,
+      "length": 50,
+      "note": "sRGB, gAMA, pHYs"
+    },
+    {
+      "part": "pixels",
+      "offset": 83,
+      "length": 87990,
+      "note": "Picture data"
+    },
+    {
+      "part": "other",
+      "offset": 88073,
+      "length": 12,
+      "note": "End"
+    }
+  ]
+}

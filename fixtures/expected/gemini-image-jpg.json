@@ -1,0 +1,159 @@
+{
+  "name": "gemini-image.jpg",
+  "format": "jpeg",
+  "headline": "This image says it was made by AI.",
+  "findings": [
+    {
+      "group": "ai-label",
+      "kind": "label",
+      "sentence": "Signed with a certificate issued to Google LLC. The signature matches this file.",
+      "fields": [
+        {
+          "name": "Signer",
+          "value": "Google LLC",
+          "from": "C2PA signature"
+        },
+        {
+          "name": "Certificate subject",
+          "value": "C=US, O=Google LLC, OU=Google System 60032, CN=Google Media Processing Services",
+          "from": "C2PA signature"
+        },
+        {
+          "name": "Certificate issuer",
+          "value": "C=US, O=Google LLC, CN=Google C2PA Media Services 1P ICA G3",
+          "from": "C2PA signature"
+        },
+        {
+          "name": "claim_generator_info",
+          "value": "Google C2PA Core Generator Library 1003583797:1003583797",
+          "from": "C2PA claim"
+        },
+        {
+          "name": "instanceID",
+          "value": "595cabe8-c02e-4d3b-df2c-4b838e65a31d",
+          "from": "C2PA claim"
+        },
+        {
+          "name": "action",
+          "value": "c2pa.created",
+          "from": "C2PA ingredient c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "digitalSourceType",
+          "value": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
+          "from": "C2PA ingredient c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "description",
+          "value": "Created by Google Generative AI.",
+          "from": "C2PA ingredient c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "action",
+          "value": "c2pa.edited",
+          "from": "C2PA ingredient c2pa.actions.v2, action 2"
+        },
+        {
+          "name": "digitalSourceType",
+          "value": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
+          "from": "C2PA ingredient c2pa.actions.v2, action 2"
+        },
+        {
+          "name": "description",
+          "value": "Applied imperceptible SynthID watermark.",
+          "from": "C2PA ingredient c2pa.actions.v2, action 2"
+        },
+        {
+          "name": "action",
+          "value": "c2pa.opened",
+          "from": "C2PA c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "description",
+          "value": "Opened by Google Generative AI.",
+          "from": "C2PA c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "action",
+          "value": "c2pa.resized",
+          "from": "C2PA c2pa.actions.v2, action 2"
+        },
+        {
+          "name": "digitalSourceType",
+          "value": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
+          "from": "C2PA c2pa.actions.v2, action 2"
+        },
+        {
+          "name": "description",
+          "value": "Resized by Google Generative AI.",
+          "from": "C2PA c2pa.actions.v2, action 2"
+        },
+        {
+          "name": "dc:format",
+          "value": "image/jpeg",
+          "from": "C2PA c2pa.ingredient.v3"
+        },
+        {
+          "name": "relationship",
+          "value": "parentOf",
+          "from": "C2PA c2pa.ingredient.v3"
+        }
+      ],
+      "cleanedBy": "remove-labels"
+    },
+    {
+      "group": "ai-label",
+      "kind": "label",
+      "sentence": "The label says: \"Created by Google Generative AI.\"",
+      "fields": [],
+      "cleanedBy": "remove-labels"
+    },
+    {
+      "group": "ai-label",
+      "kind": "label",
+      "sentence": "The label says Google also put an invisible watermark in the pixels. A clean copy can't remove it.",
+      "fields": [],
+      "cleanedBy": "remove-labels"
+    },
+    {
+      "group": "location",
+      "kind": "info",
+      "sentence": "No location, camera or other personal data.",
+      "fields": [],
+      "cleanedBy": "nothing"
+    }
+  ],
+  "empty": false,
+  "anatomy": [
+    {
+      "part": "header",
+      "offset": 0,
+      "length": 20,
+      "note": "File signature, JFIF header"
+    },
+    {
+      "part": "label",
+      "offset": 20,
+      "length": 13784,
+      "note": "C2PA label · signed by Google LLC"
+    },
+    {
+      "part": "header",
+      "offset": 13804,
+      "length": 589,
+      "note": "Decoding tables, Image header"
+    },
+    {
+      "part": "pixels",
+      "offset": 14393,
+      "length": 3025137,
+      "note": "Picture data"
+    },
+    {
+      "part": "other",
+      "offset": 3039530,
+      "length": 2,
+      "note": "End"
+    }
+  ]
+}

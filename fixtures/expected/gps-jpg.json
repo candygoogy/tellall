@@ -1,0 +1,157 @@
+{
+  "name": "gps.jpg",
+  "format": "jpeg",
+  "headline": "This file gives away 5 kinds of personal data.",
+  "findings": [
+    {
+      "group": "location",
+      "kind": "private",
+      "sentence": "It records the exact place it was taken: 51.4769° N, 0.0005° W.",
+      "fields": [
+        {
+          "name": "GPSLatitudeRef",
+          "value": "N",
+          "from": "Exif GPS"
+        },
+        {
+          "name": "GPSLatitude",
+          "value": "51, 28, 36.84",
+          "from": "Exif GPS"
+        },
+        {
+          "name": "GPSLongitudeRef",
+          "value": "W",
+          "from": "Exif GPS"
+        },
+        {
+          "name": "GPSLongitude",
+          "value": "0, 0, 1.8",
+          "from": "Exif GPS"
+        }
+      ],
+      "cleanedBy": "clean"
+    },
+    {
+      "group": "device",
+      "kind": "private",
+      "sentence": "It names the camera: Example Cam 1. It names the lens: Example 35mm.",
+      "fields": [
+        {
+          "name": "Make",
+          "value": "Example",
+          "from": "Exif"
+        },
+        {
+          "name": "Model",
+          "value": "Cam 1",
+          "from": "Exif"
+        },
+        {
+          "name": "LensModel",
+          "value": "Example 35mm",
+          "from": "Exif"
+        }
+      ],
+      "cleanedBy": "clean"
+    },
+    {
+      "group": "dates",
+      "kind": "private",
+      "sentence": "It records when it was taken: 1 Oct 2026 at 12:00:00.",
+      "fields": [
+        {
+          "name": "DateTimeOriginal",
+          "value": "2026:10:01 12:00:00",
+          "from": "Exif"
+        }
+      ],
+      "cleanedBy": "clean"
+    },
+    {
+      "group": "software",
+      "kind": "private",
+      "sentence": "It names the software that saved it: Example Editor 2.",
+      "fields": [
+        {
+          "name": "Software",
+          "value": "Example Editor 2",
+          "from": "Exif"
+        }
+      ],
+      "cleanedBy": "clean"
+    },
+    {
+      "group": "other-text",
+      "kind": "private",
+      "sentence": "It names a person: Test Person. It carries a comment: Made for a test.",
+      "fields": [
+        {
+          "name": "Artist",
+          "value": "Test Person",
+          "from": "Exif"
+        },
+        {
+          "name": "creator",
+          "value": "Test Person",
+          "from": "XMP"
+        },
+        {
+          "name": "Byline",
+          "value": "Test Person",
+          "from": "IPTC"
+        },
+        {
+          "name": "Comment",
+          "value": "Made for a test",
+          "from": "JPEG comment"
+        }
+      ],
+      "cleanedBy": "clean"
+    }
+  ],
+  "empty": false,
+  "anatomy": [
+    {
+      "part": "header",
+      "offset": 0,
+      "length": 2,
+      "note": "File signature"
+    },
+    {
+      "part": "metadata",
+      "offset": 2,
+      "length": 886,
+      "note": "Exif, XMP"
+    },
+    {
+      "part": "other",
+      "offset": 888,
+      "length": 498,
+      "note": "Colour profile"
+    },
+    {
+      "part": "metadata",
+      "offset": 1386,
+      "length": 65,
+      "note": "IPTC, Comment"
+    },
+    {
+      "part": "header",
+      "offset": 1451,
+      "length": 259,
+      "note": "Decoding tables, Image header"
+    },
+    {
+      "part": "pixels",
+      "offset": 1710,
+      "length": 973,
+      "note": "Picture data"
+    },
+    {
+      "part": "other",
+      "offset": 2683,
+      "length": 2,
+      "note": "End"
+    }
+  ]
+}

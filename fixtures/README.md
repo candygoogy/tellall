@@ -29,3 +29,7 @@ The copy-button HTML carried the private chat link and, for Gemini, a response I
 Nothing else changed. Because every replacement keeps its length, the header offsets are unchanged; they were checked to still land on `<html>`, the end of `<!--StartFragment-->`, `<!--EndFragment-->` and the end of the file. The `.txt` and `.formats.txt` files contained no links or IDs.
 
 Left as is: `_ngcontent-ng-c<digits>` in the Gemini HTML is an Angular style-scope name from Gemini's build, not tied to the account.
+
+## `expected/`
+
+Golden reports checked by `packages/engine/test/inspect.test.ts` (rewritten with `UPDATE=1`, then checked by hand). Each is named after the fixture file it checks, with the dot replaced by a hyphen: `chatgpt-image.png` → `chatgpt-image-png.json`, `gps.jpg` → `gps-jpg.json`. A text fixture is a pair; its report is built from the formatted copy, so it is named after the `.html` file: `chatgpt-web-button.html` → `chatgpt-web-button-html.json`.

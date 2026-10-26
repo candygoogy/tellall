@@ -1,0 +1,133 @@
+{
+  "name": "chatgpt-image.png",
+  "format": "png",
+  "headline": "This image says it was made by AI.",
+  "findings": [
+    {
+      "group": "ai-label",
+      "kind": "label",
+      "sentence": "Signed with a certificate issued to OpenAI OpCo, LLC. The signature matches this file.",
+      "fields": [
+        {
+          "name": "Signer",
+          "value": "OpenAI OpCo, LLC",
+          "from": "C2PA signature"
+        },
+        {
+          "name": "Certificate subject",
+          "value": "C=US, O=OpenAI OpCo, LLC, CN=OpenAI Media Service",
+          "from": "C2PA signature"
+        },
+        {
+          "name": "Certificate issuer",
+          "value": "C=US, ST=New York, L=New York, O=Trufo Inc., OU=CA Division, E=ca@trufo.ai, CN=Trufo C2PA Claim Signing CA (2025)",
+          "from": "C2PA signature"
+        },
+        {
+          "name": "claim_generator_info",
+          "value": "OpenAI Media Service API",
+          "from": "C2PA claim"
+        },
+        {
+          "name": "dc:title",
+          "value": "image.png",
+          "from": "C2PA claim"
+        },
+        {
+          "name": "instanceID",
+          "value": "xmp:iid:dcf3b1dc-ee87-4e43-928f-594624518c15",
+          "from": "C2PA claim"
+        },
+        {
+          "name": "action",
+          "value": "c2pa.created",
+          "from": "C2PA c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "when",
+          "value": "2026-10-25T14:46:19.830385961Z",
+          "from": "C2PA c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "softwareAgent",
+          "value": "ChatGPT gpt-image",
+          "from": "C2PA c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "digitalSourceType",
+          "value": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
+          "from": "C2PA c2pa.actions.v2, action 1"
+        },
+        {
+          "name": "action",
+          "value": "c2pa.converted",
+          "from": "C2PA c2pa.actions.v2, action 2"
+        },
+        {
+          "name": "when",
+          "value": "2026-10-25T14:46:19.830385961Z",
+          "from": "C2PA c2pa.actions.v2, action 2"
+        },
+        {
+          "name": "action",
+          "value": "c2pa.watermarked.unbound",
+          "from": "C2PA c2pa.actions.v2, action 3"
+        },
+        {
+          "name": "when",
+          "value": "2026-10-25T14:46:19.823483856Z",
+          "from": "C2PA c2pa.actions.v2, action 3"
+        }
+      ],
+      "cleanedBy": "remove-labels"
+    },
+    {
+      "group": "ai-label",
+      "kind": "label",
+      "sentence": "Made with ChatGPT (gpt-image) on 25 Oct 2026 at 14:46:19 UTC.",
+      "fields": [],
+      "cleanedBy": "remove-labels"
+    },
+    {
+      "group": "ai-label",
+      "kind": "label",
+      "sentence": "The label says OpenAI also put an invisible watermark in the pixels. A clean copy can't remove it.",
+      "fields": [],
+      "cleanedBy": "remove-labels"
+    },
+    {
+      "group": "location",
+      "kind": "info",
+      "sentence": "No location, camera or other personal data.",
+      "fields": [],
+      "cleanedBy": "nothing"
+    }
+  ],
+  "empty": false,
+  "anatomy": [
+    {
+      "part": "header",
+      "offset": 0,
+      "length": 33,
+      "note": "File signature, Image header"
+    },
+    {
+      "part": "label",
+      "offset": 33,
+      "length": 21893,
+      "note": "C2PA label · signed by OpenAI OpCo, LLC"
+    },
+    {
+      "part": "pixels",
+      "offset": 21926,
+      "length": 2481706,
+      "note": "Picture data"
+    },
+    {
+      "part": "other",
+      "offset": 2503632,
+      "length": 12,
+      "note": "End"
+    }
+  ]
+}

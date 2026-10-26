@@ -1,0 +1,53 @@
+{
+  "name": "Pasted text",
+  "format": "text",
+  "headline": "This copy carries the page's address.",
+  "findings": [
+    {
+      "group": "copy-extras",
+      "kind": "private",
+      "sentence": "The browser added the page's address to this copy: https://gemini.google.com/u/0/app/0000000000000000?pageId=none. Apps like Word and OneNote can keep it when you paste.",
+      "fields": [
+        {
+          "name": "SourceURL",
+          "value": "https://gemini.google.com/u/0/app/0000000000000000?pageId=none",
+          "from": "HTML clipboard header"
+        }
+      ],
+      "cleanedBy": "clean"
+    },
+    {
+      "group": "copy-extras",
+      "kind": "private",
+      "sentence": "The copy carries an ID from the page that looks like a response ID: model-response-message-contentr_0000000000000000.",
+      "fields": [
+        {
+          "name": "id",
+          "value": "model-response-message-contentr_0000000000000000",
+          "from": "HTML fragment"
+        }
+      ],
+      "cleanedBy": "clean"
+    },
+    {
+      "group": "copy-extras",
+      "kind": "private",
+      "sentence": "The copy carries the page's own styling (5 class names, 24 inline styles), which can hint at the site it came from.",
+      "fields": [
+        {
+          "name": "class",
+          "value": "enable-luminous-fast-follows enable-updated-hr-color markdown markdown-main-panel md-content",
+          "from": "HTML fragment"
+        },
+        {
+          "name": "style",
+          "value": "24 elements",
+          "from": "HTML fragment"
+        }
+      ],
+      "cleanedBy": "clean"
+    }
+  ],
+  "empty": false,
+  "anatomy": []
+}

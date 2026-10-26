@@ -1,0 +1,27 @@
+{
+  "name": "clean.jpg",
+  "format": "jpeg",
+  "headline": "No marks found. That doesn't prove anything: many apps and sites strip them.",
+  "findings": [],
+  "empty": true,
+  "anatomy": [
+    {
+      "part": "header",
+      "offset": 0,
+      "length": 261,
+      "note": "File signature, Decoding tables, Image header"
+    },
+    {
+      "part": "pixels",
+      "offset": 261,
+      "length": 973,
+      "note": "Picture data"
+    },
+    {
+      "part": "other",
+      "offset": 1234,
+      "length": 2,
+      "note": "End"
+    }
+  ]
+}
