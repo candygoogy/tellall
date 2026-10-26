@@ -1,0 +1,104 @@
+/* ---------- product window, smaller screens ---------- */
+@media (max-width: 1023px) {
+  .win-body { grid-template-columns: 184px 1fr; }
+  .rv-top { grid-template-columns: 180px 1fr; gap: 20px; padding: 20px 20px 0; }
+  .rv-anatomy, .rv-actions { padding-left: 20px; padding-right: 20px; }
+  .hint { margin-left: 0; }
+}
+@media (max-width: 759px) {
+  /* phones keep a fixed tilt; no pointer there. The scale stops the near edge from widening the page. */
+  .stage { padding: 0 12px; perspective: 1200px; }
+  .win-scroll { transform: none; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent); }
+  .win { height: auto; padding-bottom: 36px; }
+  .win-top { padding: 0 8px 0 12px; }
+  .win-body { display: flex; flex-direction: column; }
+  /* the files become one swipe row */
+  .side { flex-direction: row; flex-wrap: nowrap; gap: 14px; padding: 10px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--hair-2); scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .side::-webkit-scrollbar { display: none; }
+  .side-group, .side-foot { flex: none; }
+  .side-title, .side-foot p, .side-legend { display: none; }
+  .side-list { display: flex; flex-wrap: nowrap; gap: 6px; }
+  .file-item { width: auto; grid-template-columns: 24px auto auto; gap: 8px; padding: 6px 10px 6px 6px; min-height: 44px; border-color: var(--hair-2); }
+  .fi-thumb { width: 24px; height: 24px; }
+  .side-foot { margin: 0; padding: 0; align-self: center; }
+  .side-foot .btn { height: 44px; }
+  .side-all { margin: 0 0 0 6px; height: 44px; }
+  #side-live { display: flex; align-items: center; }
+  #side-live[hidden] { display: none; }
+  .view { position: relative; inset: auto; }
+  /* the answer first, then the file to scale */
+  .rv-top { order: 1; grid-template-columns: 96px 1fr; gap: 16px; padding: 18px 16px 6px; }
+  .rv-report { overflow: visible; }
+  .rv-headline { font-size: 1.3125rem; }
+  .rv-anatomy { order: 2; padding: 16px 16px 14px; margin-top: 12px; border-top: 1px solid var(--hair-2); border-bottom: 0; }
+  .rv-actions { order: 3; padding: 14px 16px 16px; }
+  .hint { max-width: none; }
+  .hint code { overflow-wrap: anywhere; }
+  .rv-text-body { padding: 18px 16px 0; }
+  .tx { max-height: 320px; }
+}
+@media (max-width: 599px) { .tl-tick-label:not(.is-first):not(.is-last) { display: none; } }
+@media (max-width: 479px) {
+  .rv-top { grid-template-columns: 1fr; }
+  .rv-plate { max-width: 132px; }
+  .finding { font-size: 0.875rem; }
+  .crumbs-group, .crumbs-sep { display: none; }
+  .st-long { display: none; }
+  .st-short { display: inline; }
+  .lc-fields { grid-template-columns: 1fr; }
+  .lc-fields dt { border-bottom: 0; padding-bottom: 2px; font-size: var(--t-data); }
+  .lc-fields dd { padding-top: 0; }
+  .tl { height: 96px; }
+  .tl-ev.is-alt { top: 41px; }
+  .tl-ev.is-alt .tl-dot { order: -1; margin: 0; }
+  .tl-ev.is-alt .tl-name { margin-top: 22px; }
+}
+
+/* ---------- reduced motion: settled states, fades only ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+  .btn:active, .icon-btn:active { transform: none; }
+  .in-view .blk, .caret, .dot-reading, .win-status.is-reading .sdot, .foot-dump.in-view i.cur { animation: none; }
+  .switch-thumb { transition: background-color 120ms linear; }
+  .all::details-content { transition: none; }
+}
+
+/* ---------- forced colours ---------- */
+@media (forced-colors: active) {
+  .part .fill { forced-color-adjust: none; }
+  .btn, .tab, .file-item, .panel { border: 1px solid CanvasText; }
+  .chip { border: 1px solid CanvasText; }
+  .brand-mark, .crumbs-mark, .drop-mark { fill: CanvasText; color: CanvasText; }
+}
+
+/* ---------- decode (mono readouts only) ---------- */
+.is-decoding { position: relative; }
+.is-decoding, .is-decoding *:not(.dc-ov):not(.dc-ov *) { color: transparent !important; }
+.dc-ov { position: absolute; inset: 0; color: var(--ink-2); white-space: pre-wrap; pointer-events: none; }
+.dc-ov .dc-cur { font-style: normal; background: var(--cursor); color: var(--bg); }
+/* the resting cursor blinks its block, never the byte under it */
+@keyframes blinkcell { 0%, 49.9% { background: transparent; color: var(--label); } 50%, 100% { background: var(--cursor); color: var(--bg); } }
+.hexdump .hd-row .hd-hex i.cur.is-rest { animation: blinkcell var(--blink) steps(1, end) 5 both; }
+@media (prefers-reduced-motion: reduce) { .hexdump .hd-row .hd-hex i.cur.is-rest { animation: none; } }
+
+/* the label's first bytes, under its strip: the hero dump's grammar carried into the card */
+.lc-hex { display: flex; flex-wrap: wrap; gap: 0 1.6ch; margin: 0 0 6px; font: 400 var(--t-data)/1.6 var(--data); font-stretch: 87.5%; color: var(--dump); white-space: pre; }
+.lc-hex .hd-off { color: var(--dump-off); }
+.lc-hex-b { color: var(--label); }
+@media (max-width: 479px) { .lc-hex-2 { display: none; } }
+
+/* ---------- words for touch: no pointer to point with, nothing to drop ---------- */
+.if-touch { display: none; }
+@media (hover: none) { .if-fine { display: none; } .if-touch { display: inline; } }
+
+/* ---------- clean copy on phones: names go in a key under the bars ---------- */
+.cl-key { display: none; }
+.cl-label > span:first-child { white-space: nowrap; }
+@media (max-width: 479px) {
+  .cl-bar .part-name { display: none; }
+  .cl-key { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 14px; font-size: var(--t-data); color: var(--ink-3); }
+  .cl-key span { display: inline-flex; align-items: center; gap: 6px; }
+  .cl-key span::before { content: ""; width: 9px; height: 9px; border-radius: var(--r-cell); background: rgb(var(--paper-rgb) / 0.12); box-shadow: inset 0 0 0 1px rgb(var(--paper-rgb) / 0.2); }
+  .cl-key .k-metadata::before { background: rgb(var(--you-rgb) / 0.35); box-shadow: inset 0 0 0 1px var(--you); rotate: 45deg; scale: 0.86; }
+  .cl-key .k-header::before, .cl-key .k-other::before { background: repeating-linear-gradient(135deg, var(--ink-3) 0 1.5px, transparent 1.5px 4px), var(--structure); }
+}

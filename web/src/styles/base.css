@@ -1,0 +1,137 @@
+:root {
+  color-scheme: dark;
+  /* graphite ground and a flat surface ladder: a printout of a dump, not a lit screen */
+  --bg: #0b0b0c;
+  --s1: #111113;
+  --s2: #17171a;
+  --s3: #1e1e22;
+  --s4: #26262b;
+  --win: #121214;
+  --fc-html: #1a1310;
+  /* warm paper ink */
+  --ink: #efede7;
+  --ink-2: #bcb9b0;
+  --ink-3: #a09d94;
+  --ctl: #78756d;          /* control edges, 3:1 and up */
+  --dump: #86837b;         /* unread bytes in the hero dump, 5.2:1 */
+  --dump-off: #7f7c74;     /* the dump's offset column, 4.7:1 */
+  --paper-rgb: 239 237 231;
+  --bg-rgb: 11 11 12;
+  --hair: rgb(var(--paper-rgb) / 0.08);
+  --hair-2: rgb(var(--paper-rgb) / 0.11);
+  --hair-3: rgb(var(--paper-rgb) / 0.18);
+  /* meaning only: blue = the AI label (who made it), orange = about you, yellow = the cursor (reading, where you are) */
+  --label: #4aa8ff;
+  --label-ink: #a5d3ff;
+  --label-rgb: 74 168 255;
+  --you: #ff6f3c;
+  --you-ink: #ffb08f;
+  --you-rgb: 255 111 60;
+  --cursor: #f5d142;
+  --cursor-rgb: 245 209 66;
+  /* context marks in diagrams */
+  --pixels: #5f5d57;
+  --structure: #3a3936;
+
+  --display: "Martian Grotesk", "Grotesk Fallback", "Inter", sans-serif;
+  --font: "Inter", "Inter Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --data: "Martian Mono", "Martian Fallback", "Martian Fallback Mac", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --t-display: clamp(2.25rem, 1.406rem + 2.885vw, 4rem);
+  --t-h2: clamp(2rem, 1.25rem + 2.4vw, 3.25rem);
+  --t-lead: 1.25rem;
+  --t-body: 1.0625rem;
+  --t-ui: 0.9375rem;
+  --t-small: 0.8125rem;
+  --t-data: 0.8125rem;   /* readouts and captions: 13 px floor */
+  --t-mark: 0.75rem;     /* only for names drawn inside bars and the cursor tag */
+
+  /* square: cells, not cards */
+  --r-cell: 1px;
+  --r-xs: 2px;
+  --r-sm: 3px;
+  --r-lg: 6px;
+
+  /* motion: reading steps like a cursor (one tick is about 34 ms); headlines and UI feedback use one strong ease-out */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --blink: 1.06s;
+
+  --wrap: 1200px;
+  --gutter: clamp(20px, 4vw, 32px);
+  --nav-h: 64px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: calc(var(--nav-h) + 16px); scrollbar-color: var(--s4) var(--bg); scrollbar-width: thin; -webkit-tap-highlight-color: transparent; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--t-body);
+  line-height: 1.55;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+img, svg { display: block; max-width: 100%; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+/* code and the file's own numbers share one data face; ligatures off so "--" and "|" show as typed */
+code, pre, kbd, .chip { font-family: var(--data); font-stretch: 87.5%; font-variant-ligatures: none; font-feature-settings: "calt" 0, "liga" 0; }
+code, kbd { font-size: max(12px, 0.875em); white-space: nowrap; }
+h1, h2, h3, p, dl, dd, ul, figure { margin: 0; }
+ul { padding: 0; list-style: none; }
+::selection { background: var(--cursor); color: var(--bg); }
+textarea, input { caret-color: var(--cursor); caret-shape: block; }
+:focus-visible { outline: 2px solid var(--cursor); outline-offset: 2px; border-radius: var(--r-xs); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--s4); border-radius: 0; border: 2px solid var(--bg); }
+
+[hidden] { display: none !important; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip { position: absolute; left: 16px; top: -60px; z-index: 100; background: var(--cursor); color: var(--bg); padding: 10px 14px; border-radius: var(--r-sm); font-weight: 600; font-size: var(--t-ui); text-decoration: none; transition: top 160ms var(--ease-out); }
+.skip:focus { top: 12px; }
+.wrap { width: 100%; max-width: calc(var(--wrap) + var(--gutter) * 2); margin: 0 auto; padding: 0 var(--gutter); }
+.ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: square; stroke-linejoin: miter; }
+.nw { white-space: nowrap; }
+/* the data face: numbers the file gave, offsets, byte counts, captions */
+.d, .rv-cap, .an-head b, .an-scale, .an-detail, .bcur-tag, .lc-where, .tl-tick-label, .tl-gap-label, .cl-size, .cl-delta, .pmap-scale, .mini-addr { font-family: var(--data); font-stretch: 87.5%; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+/* the cursor: a block that blinks in steps while something waits for input or is being read */
+/* the cursor blinks five times, then rests solid (WCAG 2.2.2: nothing blinks for more than five seconds) */
+@keyframes blink { 0%, 49.9% { opacity: 0; } 50%, 100% { opacity: 1; } }
+.blk { display: inline-block; width: 0.62em; height: 1.1em; vertical-align: -0.18em; background: var(--cursor); }
+/* off-screen cursors wait: they blink their five times when they come into view (app.js adds .in-view) */
+.in-view .blk { animation: blink var(--blink) steps(1, end) 5 both; }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 16px; border-radius: var(--r-sm);
+  font-size: var(--t-ui); font-weight: 540; letter-spacing: -0.005em; white-space: nowrap;
+  border: 1px solid transparent; text-decoration: none; user-select: none;
+  transition: background-color 120ms linear, border-color 120ms linear, color 120ms linear, transform 80ms linear;
+  touch-action: manipulation;
+}
+/* a key going down one pixel, not a squish */
+.btn:active { transform: translateY(1px); }
+.btn-sm { height: 32px; padding: 0 12px; font-size: var(--t-small); gap: 6px; }
+.btn-sm .ic { width: 14px; height: 14px; }
+.btn-primary { background: var(--ink); color: var(--bg); }
+.btn-secondary { background: var(--s2); color: var(--ink); border-color: var(--ctl); }
+.btn-ghost { background: transparent; color: var(--ink-2); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover { background: #ffffff; }
+  .btn-secondary:hover { background: var(--s3); border-color: var(--ink-3); }
+  .btn-ghost:hover { color: var(--ink); background: var(--s3); }
+}
+.btn[disabled] { opacity: 0.5; cursor: default; transform: none; }
+.icon-btn { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); background: transparent; border: 1px solid transparent; color: var(--ink-3); transition: color 120ms linear, background-color 120ms linear; }
+.icon-btn:active { transform: translateY(1px); }
+@media (hover: hover) and (pointer: fine) { .icon-btn:hover { color: var(--ink); background: var(--s3); } }
+

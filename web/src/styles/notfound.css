@@ -1,0 +1,9 @@
+@import "./fonts.css";
+@import "./base.css";
+@import "./nav.css";
+
+/* 404: the brand, one line and the way back, on the page's ground */
+.nf { min-height: 100svh; display: grid; align-content: center; gap: 28px; }
+.nf-title { font-family: var(--display); font-stretch: 118%; font-weight: 620; letter-spacing: -0.03em; font-size: clamp(2rem, 6vw, 4rem); line-height: 1.05; }
+.nf-lede { color: var(--ink-2); max-width: 40rem; }
+.nf-lede a { color: var(--ink); }

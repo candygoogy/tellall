@@ -1,0 +1,13 @@
+// Static assets only, served on its own subdomain (a Custom Domain).
+// Deployed in plan Task 12, with the user: npx wrangler deploy -c web/wrangler.jsonc
+{
+  "name": "tellall",
+  "compatibility_date": "2026-10-01",
+  "routes": [{ "pattern": "tellall.candygoogy.dev", "custom_domain": true }],
+  // A path with no file gets dist/404.html, with a 404 status.
+  "assets": { "directory": "./dist", "not_found_handling": "404-page" },
+  // Served only on its own subdomain: no <name>.<account>.workers.dev
+  // address, and no per-version preview URLs.
+  "workers_dev": false,
+  "preview_urls": false,
+}

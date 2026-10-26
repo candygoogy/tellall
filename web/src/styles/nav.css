@@ -1,0 +1,25 @@
+/* ---------- nav ---------- */
+.nav { position: fixed; inset: 0 0 auto 0; z-index: 50; height: var(--nav-h); border-bottom: 1px solid transparent; transition: background-color 160ms linear, border-color 160ms linear; }
+.nav.is-scrolled { background: rgb(var(--bg-rgb) / 0.96); border-bottom-color: var(--hair-2); }
+.nav-in { height: 100%; max-width: calc(var(--wrap) + var(--gutter) * 2); margin: 0 auto; padding: 0 var(--gutter); display: flex; align-items: center; gap: 24px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); border-radius: var(--r-xs); }
+/* the mark: ink rows take fill, the pulled-out label row takes color */
+.brand-mark { width: 24px; height: 24px; fill: var(--ink); color: var(--label); }
+.brand-word { font-family: var(--display); font-stretch: 118%; font-size: 1.125rem; font-weight: 640; letter-spacing: -0.03em; }
+.nav-links { display: flex; gap: 2px; margin-left: 20px; }
+.nav-links a, .nav-gh { font-size: var(--t-small); color: var(--ink-2); text-decoration: none; padding: 8px 10px; border-radius: var(--r-sm); transition: color 120ms linear, background-color 120ms linear; }
+@media (hover: hover) and (pointer: fine) { .nav-links a:hover, .nav-gh:hover { color: var(--ink); background: var(--s2); } }
+/* where you are: the cursor sits under the current section's link */
+.nav-links a.is-active { color: var(--ink); box-shadow: inset 0 -2px 0 var(--cursor); border-radius: 0; }
+.nav-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.nav-cta { visibility: hidden; opacity: 0; transition: opacity 120ms linear, visibility 0s linear 120ms; }
+.nav.has-cta .nav-cta { visibility: visible; opacity: 1; transition: opacity 120ms linear; }
+.nav-menu { display: none; height: 40px; padding: 0 14px; border-radius: var(--r-sm); background: transparent; border: 1px solid var(--ctl); font-size: var(--t-small); font-weight: 540; }
+.nav-sheet { position: absolute; top: var(--nav-h); left: 0; right: 0; background: var(--bg); border-bottom: 1px solid var(--hair-2); padding: 8px var(--gutter) 16px; display: grid; }
+.nav-sheet a { padding: 12px 4px; min-height: 44px; font-size: var(--t-body); color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--hair); }
+@media (max-width: 1023px) {
+  .nav-links, .nav-gh { display: none; }
+  .nav-menu { display: inline-flex; align-items: center; }
+}
+@media (max-width: 479px) { .nav .js-choose { display: none; } }
+

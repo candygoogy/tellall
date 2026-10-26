@@ -1,0 +1,42 @@
+/* tellall: the page's type. Self-hosted, SIL Open Font License (public/fonts/*-OFL.txt).
+   Ported from the approved mockup (design/d2), "Offset" identity. Dark only. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-4.1-latin-opsz-wght.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+/* metric-matched fallback so text doesn't reflow when Inter arrives */
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial");
+  size-adjust: 107.12%;
+  ascent-override: 90.44%;
+  descent-override: 22.52%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Martian Grotesk";
+  src: url("/fonts/martian-grotesk-latin-wdth-wght.woff2") format("woff2");
+  font-weight: 100 1000;
+  font-stretch: 75% 200%;
+  font-style: normal;
+  font-display: block;
+}
+/* Arial Bold scaled to Martian Grotesk's width at 100% (ratio measured on the hero and closing lines) */
+@font-face { font-family: "Grotesk Fallback"; src: local("Arial Bold"), local("Arial-BoldMT"); size-adjust: 120%; ascent-override: 83.3%; descent-override: 16.7%; line-gap-override: 0%; }
+/* width-matched fallbacks for the data face (Martian Mono at 87.5% is 0.65 em a glyph), so the
+   hex dump keeps its width while the real face loads */
+@font-face { font-family: "Martian Fallback"; src: local("Consolas"); size-adjust: 118.2%; ascent-override: 84.6%; descent-override: 16.9%; line-gap-override: 0%; }
+@font-face { font-family: "Martian Fallback Mac"; src: local("Menlo"); size-adjust: 108%; ascent-override: 92.6%; descent-override: 18.5%; line-gap-override: 0%; }
+@font-face {
+  font-family: "Martian Mono";
+  src: url("/fonts/martian-mono-latin-standard-normal.woff2") format("woff2");
+  font-weight: 100 800;
+  font-stretch: 75% 112.5%;
+  font-style: normal;
+  font-display: block;
+}
+

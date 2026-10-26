@@ -1,0 +1,17 @@
+{
+  "name": "tellall",
+  "version": "0.1.0",
+  "description": "See in plain sentences what an image or a copied text gives away about you (AI labels, location, camera, dates, hidden characters), and make clean copies that keep AI labels.",
+  "author": { "name": "candygoogy" },
+  "license": "MIT",
+  "homepage": "https://github.com/candygoogy/tellall",
+  "repository": "https://github.com/candygoogy/tellall",
+  "keywords": [
+    "privacy",
+    "metadata",
+    "exif",
+    "c2pa",
+    "content-credentials",
+    "ai-labels"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "tellall",
+  "owner": {
+    "name": "candygoogy"
+  },
+  "metadata": {
+    "description": "tellall: see what a file or a copied text tells about you, and make clean copies."
+  },
+  "plugins": [
+    {
+      "name": "tellall",
+      "source": "./plugin/tellall",
+      "description": "See what an image or a copied text gives away about you, and make clean copies."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom", "dom.iterable", "webworker.importscripts"],
+    "types": ["node"],
+    "skipLibCheck": true
+  },
+  "include": ["src", "build", "test", "vite.config.ts", "vitest.config.ts"]
+}

@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- head-script -->
+<title>tellall: see what your files and copied text give away</title>
+<meta name="description" content="tellall shows, in plain sentences, what an image or a pasted text gives away: AI labels, location, camera, hidden characters. It makes a clean copy on your device.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0b0c">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tellall.candygoogy.dev/">
+<meta property="og:title" content="tellall: see what your files and copied text give away">
+<meta property="og:description" content="AI labels, location, camera, hidden characters: tellall says what an image or a pasted text gives away, and makes a clean copy on your device.">
+<meta property="og:image" content="https://tellall.candygoogy.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://tellall.candygoogy.dev/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="preload" href="/fonts/martian-grotesk-latin-wdth-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/inter-4.1-latin-opsz-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/martian-mono-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+<a class="skip" href="#reader">Skip to the reader</a>
+
+<!-- icons: one 1.5 stroke with square caps and mitred joins, like the cells; stroke and fill come from .ic -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 32 32"><rect x="3" y="4" width="11" height="6" rx="0.6"/><rect x="16" y="4" width="8" height="6" rx="0.6"/><rect x="3" y="22" width="8" height="6" rx="0.6"/><rect x="13" y="22" width="11" height="6" rx="0.6"/><rect x="10" y="13" width="20" height="6" rx="0.6" fill="currentColor"/></symbol>
+  <symbol id="i-image" viewBox="0 0 16 16"><path d="M2.75 2.75h10.5v10.5H2.75zM2.75 10.75l3-3 3 3 2-2 2.5 2.5"/></symbol>
+  <symbol id="i-text" viewBox="0 0 16 16"><path d="M2.75 4.75h10.5M2.75 8.75h5.5"/><rect x="9.75" y="6.75" width="3" height="4" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-replay" viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.46-3.54M3.25 2.25v2.5h2.5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><path d="M5.75 5.75h7.5v7.5h-7.5zM2.75 10.25v-7.5h7.5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3.25 8.25 3.25 3.25 6.25-7"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 2.25v8.25M4.75 7.25 8 10.5l3.25-3.25M2.75 13.25h10.5"/></symbol>
+</svg>
+
+<header class="nav" id="nav">
+  <div class="nav-in">
+    <a class="brand" href="#top" aria-label="tellall, back to top">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-mark"/></svg>
+      <span class="brand-word" translate="no">tellall</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#labels">AI labels</a>
+      <a href="#hidden">Hidden characters</a>
+      <a href="#clean">Clean copy</a>
+      <a href="#cli">CLI and agents</a>
+      <a href="#privacy">Privacy</a>
+    </nav>
+    <div class="nav-end">
+      <a class="nav-gh" href="https://github.com/candygoogy/tellall">GitHub</a>
+      <button class="btn btn-primary btn-sm js-choose nav-cta" type="button">Choose images</button>
+      <button class="nav-menu" type="button" aria-expanded="false" aria-controls="nav-sheet">Menu</button>
+    </div>
+  </div>
+  <div class="nav-sheet" id="nav-sheet" hidden>
+    <a href="#labels">AI labels</a>
+    <a href="#hidden">Hidden characters</a>
+    <a href="#clean">Clean copy</a>
+    <a href="#cli">CLI and agents</a>
+    <a href="#privacy">Privacy</a>
+    <a href="https://github.com/candygoogy/tellall">GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy wrap">
+      <h1 id="hero-title" class="display"><span class="line">Every file says more</span> <span class="line">than you think.</span></h1>
+      <p class="hero-lede">tellall shows what an image or copied text gives away, in plain sentences, and makes a clean copy. It all happens on your device.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary js-choose" type="button"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>Choose images</button>
+        <button class="btn btn-secondary js-paste" type="button"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Paste text</button>
+      </div>
+      <!-- examples:hexdump -->
+      <input class="file-input" id="file-input" type="file" multiple accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,.png,.jpg,.jpeg,.webp" tabindex="-1" aria-hidden="true">
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="win-scroll">
+        <div class="win-tilt">
+          <div class="win" id="reader" data-ui role="region" aria-label="tellall reader" tabindex="-1">
+            <div class="win-top">
+              <div class="crumbs">
+                <svg class="crumbs-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-mark"/></svg>
+                <span class="crumbs-group" id="r-group">Examples</span>
+                <span class="crumbs-sep" aria-hidden="true">/</span>
+                <span class="crumbs-name" id="r-name">chatgpt-image.png</span>
+              </div>
+              <div class="win-tools">
+                <span class="win-status" id="r-status"><span class="sdot" aria-hidden="true"></span><span id="r-status-text">Read on this device</span></span>
+                <button class="icon-btn" id="r-replay" type="button" aria-label="Replay the reading"><svg class="ic" aria-hidden="true"><use href="#i-replay"/></svg></button>
+              </div>
+            </div>
+            <div class="win-body">
+              <aside class="side" aria-label="Files">
+                <div class="side-group" id="side-live" hidden>
+                  <h2 class="side-title">Your files</h2>
+                  <ul class="side-list" id="side-live-list"></ul>
+                  <button class="btn btn-secondary btn-sm side-all" id="dl-all" type="button" hidden><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg><span>Download all clean</span></button>
+                </div>
+                <div class="side-group">
+                  <h2 class="side-title">Examples</h2>
+                  <ul class="side-list" id="side-examples">
+<!-- examples:list -->
+                  </ul>
+                </div>
+                <div class="side-foot">
+                  <p class="side-legend" aria-hidden="true"><span><i class="dot-label"></i>AI label</span><span><i class="dot-private"></i>About you</span><span><i class="dot-none"></i>No marks found</span></p>
+                  <button class="btn btn-secondary btn-sm js-choose" type="button"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>Choose images</button>
+                  <p>Or drop several images anywhere on this page.</p>
+                </div>
+              </aside>
+              <div class="win-main" id="r-main">
+                <div class="view" id="r-view"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="sr-only" id="r-live" aria-live="polite"></p>
+    <p class="sr-only" id="find-desc">Shows where this sits in the file. Press to keep it lit.</p>
+  </section>
+
+  <section class="sec sec-labels" id="labels" aria-labelledby="labels-title">
+    <div class="wrap">
+      <header class="sec-head">
+        <h2 class="sec-title" id="labels-title">An AI image carries a signed label.</h2>
+        <p class="sec-lede">ChatGPT and Gemini put a signed label inside the images they make. tellall reads it and says who signed it, which tool made the image, when, and what the label says about the pixels. It reports what the label says and never rules on the image.</p>
+      </header>
+      <div class="labels-grid">
+        <div class="steps" id="steps">
+          <span class="steps-track" aria-hidden="true"><span class="steps-fill" id="steps-fill"></span></span>
+          <button class="step" type="button" data-step="0" aria-pressed="true">
+            <span class="step-title">Who signed it</span>
+            <span class="step-body">The label carries a certificate. tellall names who it was issued to and checks that the signature still matches the file.</span>
+          </button>
+          <button class="step" type="button" data-step="1" aria-pressed="false">
+            <span class="step-title">What made it, and when</span>
+            <span class="step-body">The label lists each step the image went through, often with the exact time it happened.</span>
+          </button>
+          <button class="step" type="button" data-step="2" aria-pressed="false">
+            <span class="step-title">What it says about the pixels</span>
+            <span class="step-body">When the label states an invisible watermark, tellall repeats it and adds that a clean copy can't remove it.</span>
+          </button>
+        </div>
+        <div class="card-col">
+          <div class="label-card panel" id="label-card" data-ui>
+            <div class="lc-head">
+              <div class="tabs" role="tablist" aria-label="Example label">
+                <button class="tab" role="tab" type="button" id="lt-chatgpt" aria-selected="true" aria-controls="lc-body" data-file="chatgpt">chatgpt-image.png</button>
+                <button class="tab" role="tab" type="button" id="lt-gemini" aria-selected="false" aria-controls="lc-body" data-file="gemini" tabindex="-1">gemini-image.jpg</button>
+              </div>
+              <p class="lc-where" id="lc-where"></p>
+            </div>
+            <div class="lc-body" id="lc-body" role="tabpanel" aria-labelledby="lt-chatgpt">
+              <div class="bar lc-strip" id="lc-strip" aria-hidden="true"></div>
+              <p class="lc-hex" id="lc-hex" aria-hidden="true"></p>
+              <p class="lc-strip-cap" id="lc-strip-cap"></p>
+              <dl class="lc-fields" id="lc-fields"></dl>
+              <div class="lc-time" id="lc-time"></div>
+            </div>
+            <div class="lc-says">
+              <p class="lc-sentence"><span class="lc-says-by">tellall says: </span><span id="lc-sentence"></span></p>
+              <p class="sr-only" id="lc-live" aria-live="polite"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-hidden" id="hidden" aria-labelledby="hidden-title">
+    <div class="wrap">
+      <header class="sec-head is-statement">
+        <h2 class="sec-title" id="hidden-title">Copied text can hide characters.</h2>
+        <p class="sec-lede">They don't show on screen, but they travel with what you paste. tellall marks each one and copies the text back without them.</p>
+      </header>
+      <div class="hx panel" id="hx" data-ui>
+        <div class="hx-bar">
+          <p class="hx-src" id="hx-src">Example text with planted characters</p>
+          <div class="hx-tools">
+            <label class="switch"><input type="checkbox" id="hx-show" checked><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span><span>Show hidden characters</span></label>
+            <button class="btn btn-secondary btn-sm" id="hx-own" type="button" aria-expanded="false" aria-controls="hx-input-wrap">Paste your own</button>
+          </div>
+        </div>
+        <div class="hx-input-wrap" id="hx-input-wrap" hidden>
+          <label class="hx-input-label" for="hx-input">Paste or type text. It's read on this device as you type.</label>
+          <textarea id="hx-input" class="hx-input" rows="3" spellcheck="false"></textarea>
+        </div>
+        <div class="hx-text" id="hx-text" tabindex="0" role="region" aria-label="The text, with hidden characters marked"></div>
+        <div class="hx-map pmap" id="hx-map" aria-hidden="true"></div>
+        <p class="pmap-scale hx-scale" id="hx-scale" aria-hidden="true"></p>
+        <div class="hx-foot">
+          <div class="hx-report">
+            <p class="hx-headline" id="hx-headline"></p>
+            <ul class="hx-findings" id="hx-findings"></ul>
+          </div>
+          <div class="hx-act">
+            <button class="btn btn-primary" id="hx-copy" type="button"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy clean text</span></button>
+            <p class="hx-status" id="hx-status" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+      <div class="fc">
+        <div class="fc-copy">
+          <h3 class="fc-title">What a formatted copy holds</h3>
+          <p class="fc-note">Formatted copies can carry the page's address into apps like Word and OneNote; Copy clean text copies plain text only.</p>
+        </div>
+        <!-- examples:copy -->
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-clean" id="clean" aria-labelledby="clean-title">
+    <div class="wrap">
+      <div class="clean-grid">
+        <div class="clean-copy">
+          <h2 class="sec-title" id="clean-title">A clean copy drops what's about you.</h2>
+          <p class="sec-lede">Location, camera, dates, names and IDs go. The AI label stays, and the picture data stays byte for byte. Removing a label is a separate step, only in the command line, for files you own.</p>
+            <div class="cl-lists">
+            <div class="cl-list">
+              <p class="cl-list-title">Removed</p>
+              <ul id="cl-removed"></ul>
+            </div>
+            <div class="cl-list">
+              <p class="cl-list-title">Kept</p>
+              <ul id="cl-kept"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="clean-main">
+      <div class="cl panel" id="cl" data-ui>
+        <div class="cl-top">
+          <div class="tabs" role="tablist" aria-label="Example file">
+            <button class="tab" role="tab" type="button" id="ct-gps" aria-selected="true" aria-controls="cl-body" data-file="gps">gps.jpg</button>
+            <button class="tab" role="tab" type="button" id="ct-chatgpt" aria-selected="false" aria-controls="cl-body" data-file="chatgpt" tabindex="-1">chatgpt-image.png</button>
+          </div>
+          <p class="cl-delta" id="cl-delta"></p>
+        </div>
+        <div class="cl-body" id="cl-body" role="tabpanel" aria-labelledby="ct-gps">
+          <div class="cl-row">
+            <p class="cl-label"><span>Original</span><span class="cl-size" id="cl-size-a"></span></p>
+            <div class="bar cl-bar" id="cl-bar-a"></div>
+          </div>
+          <svg class="cl-links" id="cl-links" aria-hidden="true" preserveAspectRatio="none"></svg>
+          <div class="cl-row cl-row-b">
+            <div class="bar cl-bar" id="cl-bar-b"></div>
+            <p class="cl-label"><span>Clean copy</span><span class="cl-size" id="cl-size-b"></span></p>
+          </div>
+          <p class="cl-note" id="cl-note"></p>
+        </div>
+      </div>
+        </div>
+      </div>
+      <div class="cl-rules" tabindex="0" role="region" aria-labelledby="rules-cap">
+        <table class="rules">
+          <caption id="rules-cap">What each kind of clean copy removes</caption>
+          <thead><tr><th scope="col">In the file</th><th scope="col">Clean copy (this page and the CLI)</th><th scope="col"><code translate="no">--remove-labels</code> (CLI only)</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Location, camera, serials, dates, software, comments</th><td data-label="Clean copy">Removed</td><td data-label="With --remove-labels">Removed</td></tr>
+            <tr><th scope="row">Tracking IDs (DocumentID, InstanceID)</th><td data-label="Clean copy">Removed</td><td data-label="With --remove-labels">Removed</td></tr>
+            <tr><th scope="row">Colour profile</th><td data-label="Clean copy">Kept, the picture needs it</td><td data-label="With --remove-labels">Kept</td></tr>
+            <tr><th scope="row">AI label</th><td class="keep" data-label="Clean copy">Kept</td><td data-label="With --remove-labels">Removed</td></tr>
+            <tr><th scope="row">Picture data</th><td data-label="Clean copy">Byte for byte the same</td><td data-label="With --remove-labels">Byte for byte the same</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-cli" id="cli" aria-labelledby="cli-title">
+    <div class="wrap">
+      <header class="sec-head is-statement">
+        <h2 class="sec-title" id="cli-title">The same engine in your terminal and your agent.</h2>
+        <p class="sec-lede">Same sentences on a file or a folder, JSON for scripts, an exit code for CI, and a skill for Claude Code, Codex and Cursor.</p>
+      </header>
+      <div class="cli-grid">
+        <div class="term panel" id="term" data-ui>
+          <div class="term-top">
+            <div class="tabs" role="tablist" aria-label="Where it runs">
+              <button class="tab" role="tab" type="button" id="tt-cli" aria-selected="true" aria-controls="term-body" data-term="cli">Terminal</button>
+              <button class="tab" role="tab" type="button" id="tt-agent" aria-selected="false" aria-controls="term-body" data-term="agent" tabindex="-1">Agent skill</button>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="term-copy" type="button"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy command</span></button>
+          </div>
+          <pre translate="no" class="term-body" id="term-body" role="tabpanel" aria-labelledby="tt-cli" tabindex="0"></pre>
+        </div>
+        <dl class="flags">
+          <div><dt><code translate="no">npx tellall &lt;file|dir|-&gt;</code></dt><dd>Plain-sentence report. Use <code translate="no">-</code> to read text from stdin. Node 20+.</dd></div>
+          <div><dt><code translate="no">--json</code></dt><dd>Machine-readable reports</dd></div>
+          <div><dt><code translate="no">--all</code></dt><dd>Also print raw fields</dd></div>
+          <div><dt><code translate="no">--fail-on private|label|any</code></dt><dd>Exit 1 if any input has that kind of finding, for CI. Exit 0 is done, 2 a usage or read error.</dd></div>
+          <div><dt><code translate="no">clean &lt;file|dir&gt;</code></dt><dd>Write clean copies next to each file as <code translate="no">name.clean.ext</code>, never touching originals</dd></div>
+          <div><dt><code translate="no">--remove-labels</code></dt><dd>Also remove AI labels, on files you own</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-privacy" id="privacy" aria-labelledby="privacy-title">
+    <div class="wrap">
+      <header class="sec-head is-center">
+        <h2 class="sec-title" id="privacy-title">Nothing leaves this page.</h2>
+        <p class="sec-lede">The engine runs in a worker inside this tab. The page's own rules forbid network connections, so a file can't be sent anywhere, even by mistake. Try it with Wi‑Fi off.</p>
+      </header>
+      <div class="net panel" id="net" data-ui>
+        <div class="net-grid" id="net-grid" aria-hidden="true"></div>
+        <div class="net-map">
+          <button class="icon-btn net-replay" id="net-replay" type="button" aria-label="Replay the diagram"><svg class="ic" aria-hidden="true"><use href="#i-replay"/></svg></button>
+          <svg class="net-lines" id="net-lines" aria-hidden="true" preserveAspectRatio="none"></svg>
+          <div class="node node-file" id="node-file"><span class="node-k">Your file</span><span class="node-v">chatgpt-image.png</span></div>
+          <div class="node node-tab" id="node-tab"><span class="node-k">This tab</span><span class="node-v">Worker running tellall's engine</span><span class="node-n">Files are read here and never leave it.</span></div>
+          <div class="node node-out" id="node-out"><span class="node-k">On your screen</span><span class="node-v">Report and clean copy</span></div>
+          <div class="node node-net" id="node-net"><span class="node-k">Network</span><span class="node-v"><code translate="no">connect-src 'none'</code></span><span class="node-v node-v-short">Blocked</span><span class="node-n">The page's own rules refuse every connection.</span></div>
+          <span class="gate" id="gate" aria-hidden="true"></span>
+        </div>
+        <div class="net-count">
+          <p class="count-num" id="req-count" aria-describedby="req-label">0</p>
+          <p class="count-label" id="req-label">requests to other sites since this page loaded</p>
+          <p class="count-blocked" id="req-blocked" aria-live="polite"></p>
+          <button class="btn btn-secondary btn-sm" id="req-try" type="button">Try to send a request</button>
+          <p class="count-status" id="req-status" aria-live="polite"></p>
+          <p class="count-note">Fonts, scripts and pictures come from the page itself. There are no analytics on it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="close" aria-labelledby="close-title">
+    <div class="wrap close-in">
+      <div class="close-copy">
+        <h2 class="close-title" id="close-title">Read your own file.</h2>
+        <p class="close-lede">Drop an image you made or were sent, or paste text you copied. tellall reads it on this device and tells you what it gives away.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary js-choose" type="button"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>Choose images</button>
+          <button class="btn btn-secondary js-paste" type="button"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Paste text</button>
+        </div>
+      </div>
+      <div class="mini" data-ui>
+        <div class="mini-top" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#i-mark"/></svg><span>tellall</span><span>/</span><b>New reading</b></div>
+        <div class="mini-drop" id="mini-drop">
+          <p class="mini-addr" aria-hidden="true">00000000 <span class="blk"></span></p>
+          <p><span class="if-fine">Drop images here. The reader at the top of the page shows what they give away.</span><span class="if-touch">Choose images and the reader at the top of the page shows what they give away.</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-brand">
+      <a class="brand" href="#top" aria-label="tellall, back to top">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-mark"/></svg>
+        <span class="brand-word" translate="no">tellall</span>
+      </a>
+      <p class="foot-line">Runs on your device. This page can't make network requests.</p>
+      <p class="foot-offline">Load it once, turn Wi‑Fi off, and it still reads your files.</p>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="#labels">AI labels</a>
+      <a href="#hidden">Hidden characters</a>
+      <a href="#clean">Clean copy</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#reader">This page</a>
+      <a href="#cli">Command line and agent skill</a>
+      <a href="https://github.com/candygoogy/tellall">Repository on GitHub</a>
+      <a href="https://github.com/candygoogy/tellall/blob/main/LICENSE">MIT licence</a>
+      <a href="https://photo.candygoogy.dev">Just a camera photo? Photo check is simpler</a>
+    </nav>
+    <!-- examples:footdump -->
+    <div class="foot-base">
+      <span><a href="https://candygoogy.dev">made by candygoogy</a></span>
+      <span>Fonts: Inter, Martian Grotesk and Martian Mono, all under the SIL Open Font License</span>
+    </div>
+  </div>
+</footer>
+
+<div class="drop" id="drop" hidden>
+  <div class="drop-in"><svg class="drop-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-mark"/></svg><p>Drop to read on this device</p></div>
+</div>
+</body>
+</html>

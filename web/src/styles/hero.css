@@ -1,0 +1,47 @@
+/* ---------- hero ---------- */
+.hero { position: relative; padding-top: calc(var(--nav-h) + clamp(40px, 7vh, 84px)); }
+.hero-copy { position: relative; }
+.display { position: relative; z-index: 1; font-family: var(--display); font-size: var(--t-display); font-stretch: 118%; line-height: 1; font-weight: 620; letter-spacing: -0.03em; text-wrap: balance; }
+@media (max-width: 599px) { .display { font-stretch: 100%; font-size: clamp(1.5rem, 7.8vw, 2rem); } }
+.display .line { display: block; }
+@media (min-width: 600px) { .display .line { white-space: nowrap; } }
+.hero-lede { position: relative; z-index: 1; margin-top: 24px; max-width: 40rem; font-size: var(--t-lead); line-height: 1.45; color: var(--ink-2); letter-spacing: -0.01em; text-wrap: pretty; }
+.hero-actions { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* the hero dump: the first 144 bytes of chatgpt-image.png, read from the fixture. Decorative (aria-hidden),
+   but every glyph still clears 4.5:1. The cursor walks to byte 33 (0x21), where the C2PA label starts. */
+.hexdump { position: absolute; right: var(--gutter); top: -4px; z-index: 0; display: flex; flex-direction: column; font: 400 var(--t-data)/1.5 var(--data); font-stretch: 87.5%; font-variant-numeric: tabular-nums; color: var(--dump); white-space: pre; pointer-events: none; user-select: none; }
+.hexdump i { font-style: normal; }
+.hd-cap { color: var(--ink-3); }
+.hd-note { margin: 2px 0 12px; color: var(--ink-3); }
+.hd-note b { color: var(--label-ink); font-weight: 500; }
+.hd-row { display: flex; gap: 1.6ch; }
+.hd-off { color: var(--dump-off); }
+.hd-hex { display: flex; gap: 0.9ch; }
+.hd-asc { display: flex; }
+.hexdump .seen { color: var(--ink-2); }
+.hd-row.is-on .is-label { color: var(--label); }
+.hd-row.is-on .hd-hex .is-label { background: rgb(var(--label-rgb) / 0.16); }
+.hexdump i.cur, .hexdump .hd-row.is-on .hd-hex i.cur { background: var(--cursor); color: var(--bg); }
+.hd-cap-narrow { display: none; }
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .hd-asc { display: none; }
+  .hero-lede { max-width: calc(100% - 340px); }
+}
+@media (max-width: 1023px) {
+  /* narrower: four rows in the flow, the ones where the label begins */
+  .hexdump { position: static; margin-top: 32px; }
+  .hd-row:not(.hd-near) { display: none; }
+  .hd-note { order: 9; margin: 4px 0 0; }
+  .hd-cap-wide { display: none; }
+  .hd-cap-narrow { display: inline; }
+}
+@media (max-width: 374px) { .hd-asc { display: none; } }
+
+
+/* Before main.ts runs (build/head.js adds .intro when the opening will move): the parts the opening
+   brings in wait hidden, so the headline never shows and then vanishes. If main.ts never runs,
+   they show after 3 s anyway. */
+html.intro :is(#hero-title, .hero-lede, .hero .hero-actions .btn, .nav-in > *, #reader) { opacity: 0; animation: intro-safety 0s 3s forwards; }
+@keyframes intro-safety { to { opacity: 1; } }
