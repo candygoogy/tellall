@@ -88,7 +88,7 @@ function prepareIntro(): void {
   const typed = typeTitle($("#hero-title"), 0.075);
   if (typed) heroTL.add(typed.play(), 0.05);
   heroTL
-    .from(".hero-lede", { opacity: 0, ...FADE }, 0.62)
+    .from(".hero-lede", { opacity: 0, ...FADE }, 0.1)
     .from(
       ".hero .hero-actions .btn",
       { opacity: 0, ...FADE, stagger: 0.06 },
@@ -146,8 +146,18 @@ function scrollScenes(): void {
   }
 }
 
-function start(): void {
+/** The opening plays once the fonts are in (they're font-display: block,
+ * so text set before them would be invisible), without waiting for load,
+ * which waits for every picture on the page. */
+let introPlayed = false;
+function playIntro(): void {
+  if (introPlayed) return;
+  introPlayed = true;
   heroTL?.play(0);
+}
+
+function start(): void {
+  playIntro();
   scrollScenes();
   void document.fonts.ready.then(() => {
     ScrollTrigger.refresh();
@@ -175,5 +185,11 @@ initPrivacy();
 prepareIntro();
 // The intro has set its first frames: what head.js held back can show.
 document.documentElement.classList.remove("intro");
+// The faces the opening sets, the headline's and the lede's: asked for by
+// name, since fonts.ready alone can settle before the page has asked for
+// any of them.
+void Promise.all(
+  ['1em "Martian Grotesk"', '1em "Inter"'].map((f) => document.fonts.load(f)),
+).then(playIntro, playIntro);
 if (document.readyState === "complete") start();
 else addEventListener("load", start, { once: true });

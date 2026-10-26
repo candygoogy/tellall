@@ -3,11 +3,12 @@
 // part stays visible and pointable; a file that is almost all picture gets
 // an enlarged row of its first (or last) bytes above the bar. Point at a
 // bar and a yellow cursor reads the byte under the pointer.
-import type { Group, Report } from "@tellall/engine";
+import type { Group } from "@tellall/engine";
 import { $$, fmt } from "../dom.ts";
 import { fineMQ } from "../motion.ts";
+import { pct, type Part } from "./reader-html.ts";
 
-export type Part = Report["anatomy"][number];
+export { keysHTML, pct, zoomRange, type Part } from "./reader-html.ts";
 
 export const KIND_NAME: Record<Part["part"], string> = {
   header: "Structure",
@@ -28,14 +29,6 @@ export const GROUP_PARTS: Partial<Record<Group, Part["part"][]>> = {
   ids: ["metadata"],
   "other-text": ["metadata"],
 };
-
-/** A part's share of the file, as a percentage said in words. */
-export function pct(len: number, total: number): string {
-  const p = (len / total) * 100;
-  if (p < 0.01) return "under 0.01";
-  if (p < 1) return p.toFixed(2);
-  return p.toFixed(1);
-}
 
 export interface Seg {
   p: Part;
@@ -94,25 +87,6 @@ export function layout(
     x += s.w;
   });
   return segs;
-}
-
-/** For a file that is mostly one part: the bytes before (or after) it,
- * with a little of it, to show enlarged. */
-export function zoomRange(
-  parts: Part[],
-  total: number,
-): [number, number] | null {
-  const dom = parts.reduce<Part | undefined>(
-    (m, p) => (!m || p.length > m.length ? p : m),
-    undefined,
-  );
-  if (!dom || dom.length / total < 0.8) return null;
-  if (dom.offset > 0) {
-    return [0, Math.min(total, Math.ceil(dom.offset * 1.08) + 1)];
-  }
-  const tailStart = dom.offset + dom.length;
-  const tail = total - tailStart;
-  return [Math.max(0, Math.floor(tailStart - tail * 0.08) - 1), total];
 }
 
 export interface BarOptions {
@@ -175,9 +149,12 @@ export function wireHits(
 }
 
 /** Hit targets for an interactive bar (WCAG 2.5.8): every part at least
- * 24 px wide gets its own button over its exact span; a run of narrower
- * neighbours shares one 24 px button ("2 parts: ..."). Buttons never
- * overlap, and the drawn bar stays to scale underneath. Rebuilt on resize. */
+ * MIN px wide gets its own button over its exact span; a run of narrower
+ * neighbours shares one MIN px button ("2 parts: ..."). Buttons never
+ * overlap, and the drawn bar stays to scale underneath. Rebuilt on resize.
+ * MIN is 28, not 24: the hero window starts tilted and scaled down
+ * (hero.ts, rotateX 20 and scale 0.92), and a target must still be 24 px
+ * on screen then. The stylesheet's .hit height matches it. */
 export function layoutHits(bar: HTMLElement | null): void {
   const state = bar && bars.get(bar);
   const info = state?.hit;
@@ -185,7 +162,7 @@ export function layoutHits(bar: HTMLElement | null): void {
   $$(".hit", bar).forEach((h) => h.remove());
   const W = bar.clientWidth;
   if (!W) return;
-  const MIN = 24;
+  const MIN = 28;
   interface Run {
     tiny: boolean;
     items: Seg[];
@@ -261,23 +238,6 @@ export function fitNames(root: ParentNode | null): void {
     n.style.visibility =
       n.scrollWidth + 16 > part.clientWidth ? "hidden" : "visible";
   });
-}
-
-/** The key under the bar: one entry per kind of part it has. */
-export function keysHTML(parts: Part[]): string {
-  const has = (k: Part["part"]) => parts.some((p) => p.part === k);
-  const keys: string[] = [];
-  if (has("label")) keys.push(`<span class="an-key k-label">AI label</span>`);
-  if (has("metadata")) {
-    keys.push(`<span class="an-key k-metadata">About you</span>`);
-  }
-  if (has("pixels")) {
-    keys.push(`<span class="an-key k-pixels">Picture data</span>`);
-  }
-  if (has("header") || has("other")) {
-    keys.push(`<span class="an-key k-structure">File structure</span>`);
-  }
-  return keys.join("");
 }
 
 /** The byte cursor: point anywhere on a bar drawn to scale and a yellow

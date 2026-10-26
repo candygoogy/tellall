@@ -17,9 +17,11 @@
 // kept it stays, its content byte for byte, after the picture and its
 // metadata; removed, it goes. With labels kept and a DigitalSourceType
 // given, an XMP chunk holding only that comes back too (xmp-min.ts),
-// flagged in VP8X (a file without VP8X can't carry one).
+// flagged in VP8X (a file without VP8X can't carry one); one the file
+// already has that holds only it keeps its content as it is.
 import { cleanIcc } from "../icc.ts";
-import { minimalXmpBytes } from "../xmp-min.ts";
+import { technicalOnly } from "../technical.ts";
+import { minimalXmpBytes, sourceOnly } from "../xmp-min.ts";
 import { isTurned, join, orientationTiff } from "./jpeg.ts";
 import { KEEP_LABELS, sourceType, type CleanOptions } from "./options.ts";
 
@@ -122,10 +124,31 @@ export function stripWebp(
   // A turn can only be carried where there's a VP8X header to flag it.
   const turn = isTurned(orientation) && header !== undefined;
   const iccChunk = flags & ICC_FLAG && list.find((c) => c.type === "ICCP");
-  const profile = iccChunk ? cleanIcc(body(b, iccChunk)) : null;
+  const cleanProfile = iccChunk ? cleanIcc(body(b, iccChunk)) : null;
+  const profile =
+    iccChunk && cleanProfile && opts.drawnAsIs
+      ? body(b, iccChunk)
+      : cleanProfile;
   const anim = animated && list.find((c) => c.type === "ANIM");
   const source = header && sourceType(opts);
   const labels = opts.keepLabels ? list.filter((c) => c.type === "C2PA") : [];
+  // Kept as they are only to tell whether there's anything to remove
+  // (options.ts): Exif with only technical tags, or every block read.
+  const exifBody = (c: Chunk) => {
+    const x = body(b, c);
+    return x[0] === 0x45 && x[1] === 0x78 && x[2] === 0x69 && x[3] === 0x66
+      ? x.subarray(6)
+      : x;
+  };
+  const read = opts.keepRead === true && header !== undefined;
+  const ownExif = header
+    ? list.filter(
+        (c) =>
+          c.type === "EXIF" &&
+          (read || (opts.drawnAsIs && technicalOnly(exifBody(c)))),
+      )
+    : [];
+  const ownXmp = read ? list.filter((c) => c.type === "XMP ") : [];
 
   const kept: Uint8Array[] = [];
   if (header) {
@@ -134,8 +157,8 @@ export function stripWebp(
     vp8x[0] =
       (flags & (ANIMATION | ALPHA)) |
       (profile ? ICC_FLAG : 0) |
-      (turn ? EXIF_FLAG : 0) |
-      (source !== undefined ? XMP_FLAG : 0);
+      (turn || ownExif.length ? EXIF_FLAG : 0) |
+      (source !== undefined || ownXmp.length ? XMP_FLAG : 0);
     vp8x.fill(0, 1, 4);
     kept.push(chunk("VP8X", vp8x));
   }
@@ -146,8 +169,17 @@ export function stripWebp(
   if (animated) {
     for (const c of list) if (c.type === "ANMF") kept.push(frame(b, c));
   } else kept.push(...picture(b, list));
-  if (turn) kept.push(chunk("EXIF", orientationTiff(orientation)));
-  if (source !== undefined) kept.push(chunk("XMP ", minimalXmpBytes(source)));
+  for (const c of ownExif) kept.push(chunk("EXIF", body(b, c)));
+  if (turn && !ownExif.length) {
+    kept.push(chunk("EXIF", orientationTiff(orientation)));
+  }
+  for (const c of ownXmp) kept.push(chunk("XMP ", body(b, c)));
+  if (source !== undefined && !ownXmp.length) {
+    const own = list.find(
+      (c) => c.type === "XMP " && sourceOnly(body(b, c)) === source,
+    );
+    kept.push(chunk("XMP ", own ? body(b, own) : minimalXmpBytes(source)));
+  }
   for (const c of labels) kept.push(chunk("C2PA", body(b, c)));
   const out = join([b.subarray(0, 12), ...kept]);
   new DataView(out.buffer).setUint32(4, out.length - 8, true);

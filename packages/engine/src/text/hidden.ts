@@ -49,11 +49,43 @@ function vsValue(cp: number): number | null {
   return null;
 }
 
+const EMOJI = /[\p{Extended_Pictographic}\p{Emoji_Modifier}]/u;
+/** An emoji, or a base an emoji selector or joiner can follow: every
+ * Extended_Pictographic character (© ® ™ ▶ ℹ ‼ and the rest), skin
+ * tones, and the blocks xcheck.py named. */
 const isEmoji = (cp: number) =>
-  cp >= 0x1f000 ||
+  (cp >= 0x1f000 && cp <= 0x1ffff) ||
   (cp >= 0x2600 && cp <= 0x27bf) ||
   (cp >= 0x2190 && cp <= 0x21ff) ||
-  (cp >= 0x2b00 && cp <= 0x2bff);
+  (cp >= 0x2b00 && cp <= 0x2bff) ||
+  (cp > 0x7f && EMOJI.test(String.fromCodePoint(cp)));
+
+/** A keycap emoji: 0-9, # or *, then VS16, then U+20E3. */
+const isKeycapBase = (cp: number) =>
+  (cp >= 0x30 && cp <= 0x39) || cp === 0x23 || cp === 0x2a;
+
+const IDEOGRAPH = /\p{Ideographic}/u;
+const isIdeograph = (cp: number) =>
+  cp > 0x2e7f && IDEOGRAPH.test(String.fromCodePoint(cp));
+const MATH = /\p{Sm}/u;
+/** Bases of Unicode's standardised variation sequences
+ * (StandardizedVariants.txt): CJK ideographs, maths symbols, Myanmar,
+ * Phags-pa, Manichaean, and the slashed zero. */
+const hasStandardVariants = (cp: number) =>
+  cp === 0x30 ||
+  (cp > 0x7f && MATH.test(String.fromCodePoint(cp))) ||
+  isIdeograph(cp) ||
+  (cp >= 0x1000 && cp <= 0x109f) ||
+  (cp >= 0xa9e0 && cp <= 0xa9ff) ||
+  (cp >= 0xaa60 && cp <= 0xaa7f) ||
+  (cp >= 0xa840 && cp <= 0xa877) ||
+  (cp >= 0x10ac0 && cp <= 0x10aff);
+
+/** The flags written with tag characters (Unicode's RGI list): black flag,
+ * England, Scotland or Wales in tag letters, cancel tag. Any other tag run
+ * can carry hidden text and still counts. */
+const FLAG_TAGS =
+  /\u{1F3F4}\u{E0067}\u{E0062}(?:\u{E0065}\u{E006E}\u{E0067}|\u{E0073}\u{E0063}\u{E0074}|\u{E0077}\u{E006C}\u{E0073})\u{E007F}/uy;
 
 // Scripts where ZWNJ/ZWJ are part of normal spelling: Arabic, Persian, Indic, Sinhala, etc.
 const joinsScript = (cp: number) =>
@@ -78,8 +110,20 @@ function classify(
   if (vsValue(cp) !== null) {
     if (cp === 0xfe0f && prev >= 0 && isEmoji(prev))
       return ["harmless", "emoji presentation selector after an emoji"];
+    if (cp === 0xfe0f && isKeycapBase(prev) && next === 0x20e3)
+      return ["harmless", "emoji presentation selector in a keycap emoji"];
     if (cp === 0xfe0e && prev >= 0)
       return ["harmless", "text presentation selector"];
+    if (cp >= 0xe0100 && isIdeograph(prev))
+      return [
+        "harmless",
+        "ideographic variation selector after a CJK character",
+      ];
+    if (cp <= 0xfe0d && hasStandardVariants(prev))
+      return [
+        "harmless",
+        "variation selector that picks a standard form of the character before it",
+      ];
     return [
       "hidden",
       "variation selector not attached to an emoji (can carry hidden bytes)",
@@ -118,11 +162,23 @@ function classify(
 export function scanText(plain: string): CharHit[] {
   const hits: CharHit[] = [];
   let prev = -1;
+  let flagEnd = -1; // the end of a tag-letter flag emoji
   for (let i = 0; i < plain.length;) {
     const cp = plain.codePointAt(i) ?? 0; // i < length, so never undefined
     const size = cp > 0xffff ? 2 : 1;
-    // Printable ASCII, newline, carriage return and tab are never reported.
-    if (!(
+    if (cp === 0x1f3f4) {
+      FLAG_TAGS.lastIndex = i;
+      if (FLAG_TAGS.test(plain)) flagEnd = FLAG_TAGS.lastIndex;
+    }
+    if (i < flagEnd && isTag(cp)) {
+      hits.push({
+        index: i,
+        codePoint: cp,
+        name: charName(cp),
+        kind: "harmless",
+        note: "tag character in a flag emoji",
+      });
+    } else if (!(
       (cp >= 0x20 && cp <= 0x7e) ||
       cp === 0x0a ||
       cp === 0x0d ||
@@ -148,7 +204,10 @@ export function scanText(plain: string): CharHit[] {
 /** Runs of 2+ tag characters (decoded to ASCII) and variation selectors (decoded as UTF-8 bytes). */
 export function decodeRuns(plain: string): DecodedRun[] {
   const out: DecodedRun[] = [];
-  for (const m of plain.matchAll(/[\u{E0000}-\u{E007F}]{2,}/gu)) {
+  // A flag emoji's tag letters spell nothing hidden.
+  const flags = new RegExp(FLAG_TAGS.source, "gu");
+  const unflagged = plain.replace(flags, "\u{1F3F4}");
+  for (const m of unflagged.matchAll(/[\u{E0000}-\u{E007F}]{2,}/gu)) {
     const decoded = [...m[0]]
       .map((c) => String.fromCodePoint((c.codePointAt(0) ?? 0) - 0xe0000))
       .join("");

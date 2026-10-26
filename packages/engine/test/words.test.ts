@@ -40,6 +40,7 @@ const SAMPLES: Record<string, unknown[][]> = {
     ["Made by a tool", null],
   ],
   "label.watermark": [["OpenAI"], [null]],
+  "label.holds": [["It names the camera: Example Cam 1. It names the lens: X."]],
   source: [
     ["trainedAlgorithmicMedia"],
     ["compositeWithTrainedAlgorithmicMedia"],
@@ -73,6 +74,8 @@ const SAMPLES: Record<string, unknown[][]> = {
     ["ZERO WIDTH SPACE", 0x200b, 1],
     ["TAG LATIN SMALL LETTER H", 0xe0068, 2],
   ],
+  "text.at": [[[3, 9, 14]], [Array.from({ length: 250 }, (_, i) => i)]],
+  "text.cut": [[949_000]],
   "copy.sourceUrl": [["https://chatgpt.com/c/00000000"]],
   "copy.ids": [[["model-response-1"]], [["a1", "b2"]]],
   "copy.styling": [

@@ -10,7 +10,8 @@
 // kept it stays, byte for byte, where it was; removed, it goes. With
 // labels kept and a DigitalSourceType given, an iTXt XMP chunk
 // (XML:com.adobe.xmp) holding only that comes back too (xmp-min.ts),
-// right after the header and the turn.
+// right after the header and the turn; one the file already has that
+// holds only it stays where it is, byte for byte.
 //
 // A kept chunk is kept only as decoders read it, so nothing can hide in
 // one: at its own size (pHYs is 9 bytes, gAMA 4, and so on), once when
@@ -24,7 +25,9 @@
 import { Unzlib, zlibSync } from "fflate";
 import { cleanIcc } from "../icc.ts";
 import { crc32 } from "../crc32.ts";
-import { minimalXmpBytes } from "../xmp-min.ts";
+import { startsWith } from "../../bytes.ts";
+import { technicalOnly } from "../technical.ts";
+import { minimalXmpBytes, sourceOnly } from "../xmp-min.ts";
 import { isTurned, join, orientationTiff } from "./jpeg.ts";
 import { KEEP_LABELS, sourceType, type CleanOptions } from "./options.ts";
 
@@ -52,6 +55,8 @@ const KEEP = new Set([
   "fcTL",
   "fdAT",
 ]);
+/** The chunks image/read.ts reads. */
+const READ = new Set(["eXIf", "exIf", "tEXt", "zTXt", "iTXt", "tIME"]);
 /** Chunks a PNG holds at most one of: decoders read the first. */
 const ONCE = new Set([
   "IHDR",
@@ -170,6 +175,35 @@ export function stripPng(
   const animated = list.some(
     (c, n) => c.type === "acTL" && n < firstData && c.end - c.start === 20,
   );
+  // A chunk that already holds only the source type, kept as it is.
+  const sourceChunk =
+    source === undefined
+      ? undefined
+      : list.find(
+          (c) =>
+            c.type === "iTXt" &&
+            startsWith(b, c.data, XMP_HEAD) &&
+            checks(b, c) &&
+            sourceOnly(b.subarray(c.data + XMP_HEAD.length, c.end - 4)) ===
+              source,
+        );
+  // Kept as they are only to tell whether there's anything to remove
+  // (options.ts): Exif with only technical tags, or every block read.
+  const isExif = (c: Chunk) => c.type === "eXIf" || c.type === "exIf";
+  const asIsExif = opts.drawnAsIs
+    ? list.find((c) => {
+        if (!isExif(c) || !checks(b, c)) return false;
+        const data = b.subarray(c.data, c.end - 4);
+        return technicalOnly(
+          startsWith(data, 0, "Exif\0\0") ? data.subarray(6) : data,
+        );
+      })
+    : undefined;
+  const read = opts.keepRead === true;
+  const exifKept = asIsExif !== undefined || (read && list.some(isExif));
+  const xmpKept =
+    read &&
+    list.some((c) => c.type === "iTXt" && startsWith(b, c.data, XMP_HEAD));
   const seen = new Set<string>();
   let dataEnded = false;
   const kept: Uint8Array[] = [b.subarray(0, SIGNATURE)];
@@ -180,6 +214,10 @@ export function stripPng(
     if (n > firstData && list[n - 1]?.type !== "IDAT") dataEnded = true;
     if (type === LABEL) {
       if (opts.keepLabels) kept.push(b.subarray(c.start, c.end));
+      return;
+    }
+    if (c === sourceChunk || c === asIsExif || (read && READ.has(type))) {
+      kept.push(b.subarray(c.start, c.end));
       return;
     }
     if (!KEEP.has(type)) return;
@@ -207,14 +245,14 @@ export function stripPng(
     if (type !== "fdAT" && type !== "IHDR" && !checks(b, c)) return;
     if (type === "iCCP") {
       const icc = iccChunk(b.subarray(c.data, c.end - 4));
-      if (icc) kept.push(icc);
+      if (icc) kept.push(opts.drawnAsIs ? b.subarray(c.start, c.end) : icc);
       return;
     }
     kept.push(b.subarray(c.start, c.end));
-    if (type === "IHDR" && isTurned(orientation)) {
+    if (type === "IHDR" && isTurned(orientation) && !exifKept) {
       kept.push(pngChunk("eXIf", orientationTiff(orientation)));
     }
-    if (type === "IHDR" && source !== undefined) {
+    if (type === "IHDR" && source !== undefined && !sourceChunk && !xmpKept) {
       const head = new TextEncoder().encode(XMP_HEAD);
       kept.push(pngChunk("iTXt", join([head, minimalXmpBytes(source)])));
     }

@@ -2,6 +2,8 @@
 // the visitor's own) and one result at a time. A result is the engine's
 // headline, its sentences, "Show everything" with the raw fields and where
 // each came from, the file drawn to scale, and the clean-copy actions.
+// The markup is reader-html.ts's; the first example's is already in
+// index.html when the page arrives.
 import type { Report } from "@tellall/engine";
 import examples from "virtual:examples";
 import {
@@ -17,95 +19,43 @@ import {
   maybe,
 } from "../dom.ts";
 import { read } from "../engine.ts";
-import type { ExampleFile } from "../example-types.ts";
 import {
   EASE,
   FADE,
   G,
   STEP,
   TICK,
-  TOUCH,
   fadeIn,
   motion,
   swap,
   typeTitle,
 } from "../motion.ts";
-import type { CleanedCopy } from "../protocol.ts";
 import {
   GROUP_PARTS,
   KIND_NAME,
   attachCursor,
   buildBar,
   fitNames,
-  keysHTML,
   layoutHits,
-  pct,
   wireHits,
-  zoomRange,
 } from "./anatomy.ts";
-import { chipClass, renderChips, sentenceHTML } from "./text.ts";
+import {
+  POINT_TEXT,
+  exampleItem,
+  fileViewHTML,
+  findingsHTML,
+  pct,
+  plateHTML,
+  statusHTML,
+  zoomRange,
+  type Item,
+} from "./reader-html.ts";
+import { chipClass, renderChips } from "./text.ts";
 
-export interface Item {
-  id: string;
-  kind: "file" | "text";
-  name: string;
-  live: boolean;
-  state?: "reading" | "done" | "error" | "paste";
-  report?: Report;
-  /** The file's size in bytes. */
-  size?: number;
-  plate?: string;
-  plateDims?: [number, number];
-  ar?: string;
-  desc?: string;
-  thumbUrl?: string;
-  file?: File;
-  cleaned?: CleanedCopy;
-  cleanUrl?: string;
-  /** The clean copy, once: the download link and the zip share it. */
-  cleanBlob?: Blob;
-  hint?: string | null;
-  /** The command in the hint: the file name quoted for a shell. */
-  command?: string | null;
-  ms?: number;
-  error?: string;
-  /** Examples: what the clean copy would be, said instead of a button. */
-  note?: string;
-  /** Examples: the file itself, so its download runs the real engine. */
-  bytes?: string;
-  /** Text: the text, and its clean copy. */
-  plain?: string;
-  cleanText?: string;
-}
+export { hintHTML, type Item } from "./reader-html.ts";
 
-const POINT_TEXT = TOUCH
-  ? "Tap a part or a sentence to see where it sits."
-  : "Point at a part or a sentence to see where it sits.";
 const NOTE =
   "Formatted copies can carry the page's address into apps like Word and OneNote; Copy clean text copies plain text only.";
-
-function exampleItem(f: ExampleFile): Item {
-  const item: Item = {
-    id: f.id,
-    kind: "file",
-    name: f.name,
-    live: false,
-    report: f.report,
-    size: f.size,
-    plate: f.plate,
-    plateDims: f.plateDims,
-    ar: f.ar,
-    desc: f.desc,
-    hint: f.hint,
-    command: f.command,
-  };
-  if (f.bytes && f.cleaned.cleaned && f.cleaned.removed.length) {
-    item.bytes = f.bytes;
-  } else {
-    item.note = f.cleaned.notes.join(" ");
-  }
-  return item;
-}
 
 export const EX: Record<string, Item> = {
   ...Object.fromEntries(
@@ -136,97 +86,13 @@ export const onPasteView = (draw: (view: HTMLElement) => void) => {
   pasteView = draw;
 };
 
-function plateHTML(item: Item): string {
-  const src = item.thumbUrl || item.plate;
-  const alt = item.plate
-    ? `Abstract plate standing in for the picture in ${item.name}`
-    : `Preview of ${item.name}`;
-  const dims = item.plateDims
-    ? ` width="${item.plateDims[0]}" height="${item.plateDims[1]}"`
-    : "";
-  return `<figure class="rv-plate">${src ? `<img src="${esc(src)}" alt="${esc(alt)}"${dims} decoding="async">` : `<div class="noprev">No preview</div>`}<span class="scan" aria-hidden="true"></span></figure>`;
-}
-function findingsHTML(r: Report): string {
-  return r.findings
-    .map(
-      (f, i) =>
-        `<li><button class="finding" type="button" data-i="${i}" aria-describedby="find-desc"><span class="f-mark k-${f.kind}" aria-hidden="true"></span><span class="f-text">${sentenceHTML(f.sentence)}</span></button></li>`,
-    )
-    .join("");
-}
-function allHTML(r: Report): string {
-  const rows = r.findings.flatMap((f) => f.fields);
-  if (!rows.length) return "";
-  return `<details class="all"><summary>Show everything</summary><table class="raw"><thead><tr><th scope="col">Field</th><th scope="col">Value</th><th scope="col">From</th></tr></thead><tbody>${rows.map((x) => `<tr><th scope="row">${esc(x.name)}</th><td>${esc(x.value)}</td><td class="from">${esc(x.from)}</td></tr>`).join("")}</tbody></table></details>`;
-}
-/** The hint under a label, its command set as code. */
-export function hintHTML(sentence: string, cmd: string): string {
-  const i = sentence.indexOf(cmd);
-  if (i < 0) return esc(sentence);
-  return (
-    esc(sentence.slice(0, i)) +
-    `<code translate="no">${esc(cmd)}</code>` +
-    esc(sentence.slice(i + cmd.length))
-  );
-}
-function actionsHTML(item: Item): string {
-  const r = item.report as Report;
-  let left = "";
-  if (item.live) {
-    const c = item.cleaned;
-    if (c?.cleaned && item.cleanUrl) {
-      const removed = c.removed.length > 0;
-      left = `<a class="btn ${removed ? "btn-primary" : "btn-secondary"} btn-sm js-dl" href="${esc(item.cleanUrl)}" download="${esc(cleanName(item.name))}"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Download clean copy</a>`;
-      if (c.notes.length)
-        left += `<p class="rv-note">${esc(c.notes.join(" "))}</p>`;
-    } else if (c) {
-      left = `<p class="rv-note">${esc(c.notes.join(" "))}</p>`;
-    }
-  } else if (item.bytes) {
-    left = `<button class="btn btn-primary btn-sm js-dl-example" type="button"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Download clean copy</button>`;
-  } else if (item.note) {
-    left = `<p class="rv-note">${esc(item.note)}</p>`;
-  }
-  const hint =
-    item.hint && item.command && r.findings.some((f) => f.group === "ai-label")
-      ? `<p class="hint"><span class="hint-text">${hintHTML(item.hint, item.command)}</span><button class="icon-btn js-copy-hint" type="button" aria-label="Copy the command"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg></button></p>`
-      : "";
-  return `<div class="rv-actions">${left}${hint}</div>`;
-}
-function fileViewHTML(item: Item): string {
-  const r = item.report as Report;
-  const total = item.size ?? 0;
-  const meta = [
-    item.desc ||
-      (r.format === "unknown" ? "Unknown format" : r.format.toUpperCase()),
-    `${fmt(total)} bytes`,
-  ].join(" · ");
-  const zoom = zoomRange(r.anatomy, total);
-  return `
-      <div class="rv-anatomy">
-        <p class="an-head"><span class="an-head-l"><span>The file, to scale</span><span class="an-keys">${keysHTML(r.anatomy)}</span></span><span><b class="an-count">${fmt(total)}</b> bytes</span></p>
-        ${zoom ? `<div class="an-zoom-wrap"><div class="bar an-zoom-bar an-zoom" aria-hidden="true"></div><svg class="an-connect" viewBox="0 0 1000 22" preserveAspectRatio="none" aria-hidden="true"><path/><line class="ln-a"/><line class="ln-b"/></svg></div>` : ""}
-        <div class="bar an-main" role="group" aria-label="The file's parts, to scale. Bytes 0 to ${fmt(total)}."></div>
-        <p class="an-scale" aria-hidden="true"><span>Byte 0</span>${zoom ? `<span class="an-zoom-note">Top row: the ${zoom[0] === 0 ? "first" : "last"} ${fmt(zoom[1] - zoom[0])} bytes, enlarged</span>` : ""}<span>${fmt(total)}</span></p>
-        <p class="an-detail" aria-live="polite">${POINT_TEXT}</p>
-      </div>
-      <div class="rv-top">
-        <div>${plateHTML(item)}<p class="rv-cap">${esc(meta)}</p></div>
-        <div class="rv-report" tabindex="-1">
-          <h2 class="rv-headline${r.empty ? " is-empty" : ""}" tabindex="-1">${esc(r.headline)}</h2>
-          <ul class="rv-findings">${findingsHTML(r)}</ul>
-          ${allHTML(r)}
-        </div>
-      </div>
-      ${actionsHTML(item)}`;
-}
 function textViewHTML(item: Item): string {
   const r = item.report as Report;
   return `
       <div class="rv-text-body">
         <h2 class="rv-headline" tabindex="-1">${esc(r.headline)}</h2>
         <div class="tx-wrap">
-          <div class="tx" tabindex="0" role="region" aria-label="The text, with hidden characters marked"></div>
+          <div class="tx" tabindex="0" role="region" aria-label="${esc(item.name)}, with hidden characters marked"></div>
           <div class="pmap" aria-hidden="true"></div>
         </div>
         <div class="rv-report rv-report-text"><ul class="rv-findings">${findingsHTML(r)}</ul></div>
@@ -489,9 +355,7 @@ const statusFor = (item: Item) =>
       : `Read on this device in ${fmt(Math.max(1, item.ms ?? 0))} ms`;
 
 export function setStatus(text: string, reading: boolean): void {
-  const short = /in (\d[\d,]*) ms$/.exec(text);
-  $("#r-status-text").innerHTML =
-    `<span class="st-long">${esc(text)}</span><span class="st-short">${esc(short ? short[1] + " ms" : text === "Example result" ? "Example" : text)}</span>`;
+  $("#r-status-text").innerHTML = statusHTML(text);
   $("#r-status").classList.toggle("is-reading", reading);
 }
 function setCrumbs(item: Item): void {

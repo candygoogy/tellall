@@ -3,20 +3,26 @@
 See in plain sentences what an image or a text tells about you: AI labels, location, camera, dates, hidden characters. Make clean copies that keep AI labels unless you ask. Everything runs on your machine; nothing is sent anywhere.
 
 ```
-npx tellall <file|dir|-> ...            plain-sentence report; "-" reads text from stdin
-        --json                          machine-readable reports
-        --all                           also print raw fields
-        --fail-on private|label|any     exit 1 if any input has that kind of finding (CI use)
-npx tellall clean <file|dir> ...        write clean copies, never touching originals
-        -o, --out <dir>                 where to write (default: next to each file, name.clean.ext)
-        --remove-labels                 also remove AI labels (C2PA, AI-source tags); files you own
-        --force                         overwrite existing .clean files
+npx tellall [options] [--] <file|dir|-> ...
+    Plain-sentence report; "-" reads text from stdin.
+    --json                       machine-readable reports
+    --all                        also print raw fields
+    --fail-on private|label|any  exit 1 if any input has that kind of finding (CI use)
+npx tellall clean [options] [--] <file|dir> ...
+    Write clean copies, never touching originals.
+    -o, --out <dir>              where to write (default: next to each file, name.clean.ext)
+    --remove-labels              also remove AI labels (C2PA, AI-source tags); files you own
+    --force                      replace .clean copies already there
+npx tellall -h, --help           this text
+npx tellall -v, --version        the version number
 ```
 
-Exit codes: 0 done, 1 `--fail-on` matched, 2 usage or read error. Needs Node 20 or later.
+Put `--` before the paths so a name starting with `-` isn't read as an option. Folders are read all the way down, except links, `node_modules` and folders whose names start with a dot; tellall says on stderr how many it skipped. `clean` doesn't clean its own earlier copies again: a `photo.clean.jpg` next to a `photo.jpg` is skipped.
+
+Exit codes: 0 done; 1 `--fail-on` matched; 2 usage, read or write error, also when `clean` can't make a copy (a damaged file, or a copy already there without `--force`). A file of a kind tellall can't read is listed and doesn't change the exit code. Needs Node 20.19 or later.
 
 ```
-$ npx tellall chatgpt-image.png
+$ npx tellall -- chatgpt-image.png
 chatgpt-image.png
   This image says it was made by AI.
   · Signed with a certificate issued to OpenAI OpCo, LLC. The signature matches this file.

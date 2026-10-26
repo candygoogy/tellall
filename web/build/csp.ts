@@ -26,7 +26,8 @@ export function cspFor(script: string): string {
   return [
     "default-src 'self'",
     "connect-src 'none'",
-    "img-src 'self' blob: data:",
+    // Pictures: the page's own, and the visitor's thumbnails (blob:).
+    "img-src 'self' blob:",
     "style-src 'self'",
     `script-src 'self' 'sha256-${sha256(script)}'`,
     "font-src 'self'",

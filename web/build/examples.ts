@@ -2,11 +2,18 @@
 // (example-data.ts's reports, clean results and bytes, made by the engine
 // on the repo's fixtures when the page is built), and the markup in
 // index.html written from the same bytes and reports: the hero's and the
-// footer's hex dumps, the sidebar's example list, the formatted-copy bars.
+// footer's hex dumps, the sidebar's example list, the formatted-copy bars,
+// and the reader's first result (with the page's own reader-html.ts, so
+// the window has its height at first paint).
 import { fileURLToPath } from "node:url";
 import type { Report } from "@tellall/engine";
 import { runnerImport, type Plugin } from "vite";
 import type { ExampleData } from "../src/example-types.ts";
+import {
+  exampleItem,
+  fileViewHTML,
+  statusHTML,
+} from "../src/view/reader-html.ts";
 import type { Examples } from "./example-data.ts";
 
 const DATA = fileURLToPath(new URL("./example-data.ts", import.meta.url));
@@ -171,6 +178,9 @@ export function examples(): Plugin {
           footdump: footDump(data, chatgpt),
           list: exampleList(data),
           copy: copyLayers(data),
+          // What result.ts shows first (FIRST), as it draws it.
+          reader: fileViewHTML(exampleItem(data.files.chatgpt), true),
+          status: statusHTML("Example result"),
         };
         return html.replace(/<!-- examples:(\w+) -->/g, (tag, key: string) => {
           const part = parts[key];

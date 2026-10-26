@@ -65,7 +65,7 @@ const XPACKET_END = /<\?xpacket end=(["'])[rw]\1\?>[ \t\r\n\0]*$/;
 /** The longest packet looked at: a gain map's is a few hundred bytes. */
 const LONGEST = 16_384;
 
-interface Element {
+export interface Element {
   prefix: string;
   local: string;
   attributes: [string, string][];
@@ -289,10 +289,11 @@ function write(found: Value[]): string {
   );
 }
 
-/** A gain map's XMP packet written anew from its values alone, padded with
- * spaces to the packet's length; null when the packet holds anything but
- * a gain map's values, or the new one wouldn't fit in its place. */
-export function gainMapPacket(packet: Uint8Array): Uint8Array | null {
+/** A packet's root element, read with the small XML above: its xpacket
+ * wrapper (in its fixed form) and trailing zeros set aside. Null when it
+ * isn't UTF-8, is longer than a few small packets, or holds anything that
+ * small XML refuses. */
+export function smallXmp(packet: Uint8Array): Element | null {
   if (packet.length > LONGEST) return null;
   try {
     let xml = new TextDecoder("utf-8", { fatal: true }).decode(packet);
@@ -304,13 +305,27 @@ export function gainMapPacket(packet: Uint8Array): Uint8Array | null {
       xml = xml.slice(0, end.index);
     } else xml = xml.replace(/\0+$/, "");
     if (xml.includes(BOM)) return null;
-    const written = new TextEncoder().encode(write(values(parse(xml))));
+    return parse(xml);
+  } catch (error) {
+    if (error instanceof Refused || error instanceof TypeError) return null;
+    throw error;
+  }
+}
+
+/** A gain map's XMP packet written anew from its values alone, padded with
+ * spaces to the packet's length; null when the packet holds anything but
+ * a gain map's values, or the new one wouldn't fit in its place. */
+export function gainMapPacket(packet: Uint8Array): Uint8Array | null {
+  const root = smallXmp(packet);
+  if (!root) return null;
+  try {
+    const written = new TextEncoder().encode(write(values(root)));
     if (written.length > packet.length) return null;
     const out = new Uint8Array(packet.length).fill(0x20);
     out.set(written);
     return out;
   } catch (error) {
-    if (error instanceof Refused || error instanceof TypeError) return null;
+    if (error instanceof Refused) return null;
     throw error;
   }
 }

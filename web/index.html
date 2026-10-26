@@ -9,13 +9,16 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0b0b0c">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="tellall">
 <meta property="og:url" content="https://tellall.candygoogy.dev/">
 <meta property="og:title" content="tellall: see what your files and copied text give away">
 <meta property="og:description" content="AI labels, location, camera, hidden characters: tellall says what an image or a pasted text gives away, and makes a clean copy on your device.">
 <meta property="og:image" content="https://tellall.candygoogy.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The tellall page: the headline “Every file says more than you think.”, a hex dump of chatgpt-image.png with its C2PA label marked, and the reader showing that file drawn to scale.">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image:alt" content="The tellall page: the headline “Every file says more than you think.”, a hex dump of chatgpt-image.png with its C2PA label marked, and the reader showing that file drawn to scale.">
 <link rel="canonical" href="https://tellall.candygoogy.dev/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
@@ -92,7 +95,7 @@
                 <span class="crumbs-name" id="r-name">chatgpt-image.png</span>
               </div>
               <div class="win-tools">
-                <span class="win-status" id="r-status"><span class="sdot" aria-hidden="true"></span><span id="r-status-text">Read on this device</span></span>
+                <span class="win-status" id="r-status"><span class="sdot" aria-hidden="true"></span><span id="r-status-text"><!-- examples:status --></span></span>
                 <button class="icon-btn" id="r-replay" type="button" aria-label="Replay the reading"><svg class="ic" aria-hidden="true"><use href="#i-replay"/></svg></button>
               </div>
             </div>
@@ -116,7 +119,7 @@
                 </div>
               </aside>
               <div class="win-main" id="r-main">
-                <div class="view" id="r-view"></div>
+                <div class="view" id="r-view"><!-- examples:reader --></div>
               </div>
             </div>
           </div>
@@ -292,10 +295,10 @@
           <pre translate="no" class="term-body" id="term-body" role="tabpanel" aria-labelledby="tt-cli" tabindex="0"></pre>
         </div>
         <dl class="flags">
-          <div><dt><code translate="no">npx tellall &lt;file|dir|-&gt;</code></dt><dd>Plain-sentence report. Use <code translate="no">-</code> to read text from stdin. Node 20+.</dd></div>
+          <div><dt><code translate="no">npx tellall &lt;file|dir|-&gt;</code></dt><dd>Plain-sentence report. Use <code translate="no">-</code> to read text from stdin. Node 20.19 or later.</dd></div>
           <div><dt><code translate="no">--json</code></dt><dd>Machine-readable reports</dd></div>
           <div><dt><code translate="no">--all</code></dt><dd>Also print raw fields</dd></div>
-          <div><dt><code translate="no">--fail-on private|label|any</code></dt><dd>Exit 1 if any input has that kind of finding, for CI. Exit 0 is done, 2 a usage or read error.</dd></div>
+          <div><dt><code translate="no">--fail-on private|label|any</code></dt><dd>Exit 1 if any input has that kind of finding, for CI. Exit 0 is done, 2 a usage, read or write error.</dd></div>
           <div><dt><code translate="no">clean &lt;file|dir&gt;</code></dt><dd>Write clean copies next to each file as <code translate="no">name.clean.ext</code>, never touching originals</dd></div>
           <div><dt><code translate="no">--remove-labels</code></dt><dd>Also remove AI labels, on files you own</dd></div>
         </dl>
@@ -307,7 +310,7 @@
     <div class="wrap">
       <header class="sec-head is-center">
         <h2 class="sec-title" id="privacy-title">Nothing leaves this page.</h2>
-        <p class="sec-lede">The engine runs in a worker inside this tab. The page's own rules forbid network connections, so a file can't be sent anywhere, even by mistake. Try it with Wi‑Fi off.</p>
+        <p class="sec-lede">The engine runs in a worker inside this tab. The page's own rules block any upload or connection its code tries, and it loads only from its own address. Try it with Wi‑Fi off.</p>
       </header>
       <div class="net panel" id="net" data-ui>
         <div class="net-grid" id="net-grid" aria-hidden="true"></div>
@@ -317,7 +320,7 @@
           <div class="node node-file" id="node-file"><span class="node-k">Your file</span><span class="node-v">chatgpt-image.png</span></div>
           <div class="node node-tab" id="node-tab"><span class="node-k">This tab</span><span class="node-v">Worker running tellall's engine</span><span class="node-n">Files are read here and never leave it.</span></div>
           <div class="node node-out" id="node-out"><span class="node-k">On your screen</span><span class="node-v">Report and clean copy</span></div>
-          <div class="node node-net" id="node-net"><span class="node-k">Network</span><span class="node-v"><code translate="no">connect-src 'none'</code></span><span class="node-v node-v-short">Blocked</span><span class="node-n">The page's own rules refuse every connection.</span></div>
+          <div class="node node-net" id="node-net"><span class="node-k">Network</span><span class="node-v"><code translate="no">connect-src 'none'</code></span><span class="node-v node-v-short">Blocked</span><span class="node-n">The page's own rules block any connection its code tries.</span></div>
           <span class="gate" id="gate" aria-hidden="true"></span>
         </div>
         <div class="net-count">
@@ -360,7 +363,7 @@
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><use href="#i-mark"/></svg>
         <span class="brand-word" translate="no">tellall</span>
       </a>
-      <p class="foot-line">Runs on your device. This page can't make network requests.</p>
+      <p class="foot-line">Runs on your device. The page's rules block any connection its code tries.</p>
       <p class="foot-offline">Load it once, turn Wi‑Fi off, and it still reads your files.</p>
     </div>
     <nav class="foot-links" aria-label="Footer">
@@ -372,6 +375,7 @@
       <a href="#cli">Command line and agent skill</a>
       <a href="https://github.com/candygoogy/tellall">Repository on GitHub</a>
       <a href="https://github.com/candygoogy/tellall/blob/main/LICENSE">MIT licence</a>
+      <a href="/third-party-licenses.txt">Third-party licences</a>
       <a href="https://photo.candygoogy.dev">Just a camera photo? Photo check is simpler</a>
     </nav>
     <!-- examples:footdump -->

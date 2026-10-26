@@ -50,6 +50,20 @@ const QUOTE = 120;
 const quote = (s: string) =>
   s.length > QUOTE ? `${s.slice(0, QUOTE - 1).trimEnd()}…` : s;
 
+/** The most of one value a field holds ("Show everything", --json). */
+const FIELD = 2000;
+function fieldValue(s: string): string {
+  if (s.length <= FIELD) return s;
+  // Not between the two halves of an emoji.
+  const end = /[\uD800-\uDBFF]/.test(s[FIELD - 1] ?? "") ? FIELD - 1 : FIELD;
+  return `${s.slice(0, end)}${en.text.cut(s.length)}`;
+}
+
+/** Markup (`<rdf:li>`, `</x>`, `<!--`) in a value: a damaged XMP packet or
+ * a planted tag. Such values stay in the fields, out of sentences. */
+const MARKUP = /<[/!?]?[\p{L}_]/u;
+const sayable = (s: string) => !MARKUP.test(s);
+
 /** One value as text: lists comma-separated, an XMP language alternative
  * as its text, short bytes as letters or numbers, long bytes not at all. */
 function asText(v: unknown): string | null {
@@ -124,7 +138,10 @@ const DEVICE_KEYS = new Set([
   "LensModel",
   "Lens",
   "LensMake",
+  "LensID",
   "HostComputer",
+  "CameraFirmware",
+  "Firmware",
   ...SERIALS,
 ]);
 const TAKEN = [
@@ -146,6 +163,7 @@ const DATE_KEYS = new Set([
   "SubSecTime",
   "SubSecTimeOriginal",
   "SubSecTimeDigitized",
+  "DateAcquired",
 ]);
 const SOFTWARE_KEYS = new Set([
   "Software",
@@ -154,6 +172,9 @@ const SOFTWARE_KEYS = new Set([
   "History",
   "OriginatingProgram",
   "ProgramVersion",
+  "ImageEditingSoftware",
+  "RAWDevelopingSoftware",
+  "MetadataEditingSoftware",
 ]);
 const ID_KEYS = new Set([
   "DocumentID",
@@ -162,6 +183,15 @@ const ID_KEYS = new Set([
   "ImageUniqueID",
   "DerivedFrom",
   "UniqueID",
+  "DocumentAncestors",
+  "DigitalImageGUID",
+  "ImageSupplierImageID",
+  "LicensorImageID",
+  "ModelReleaseID",
+  "PropertyReleaseID",
+  "Identifier",
+  "identifier",
+  "TransmissionReference",
 ]);
 const NAMES = [
   "Artist",
@@ -176,6 +206,21 @@ const NAMES = [
   "rights",
   "Credit",
   "Writer",
+  "CaptionWriter",
+  "PersonInImage",
+  "PersonInImageWDetails",
+  // The names in face regions (image/read.ts reads them out).
+  "RegionName",
+  "Owner",
+  "ImageCreator",
+  "CopyrightOwner",
+  "Licensor",
+  "ImageSupplier",
+  "contributor",
+  "publisher",
+  "author",
+  "Photographer",
+  "ImageEditor",
 ];
 const CONTACTS = ["CreatorContactInfo", "Contact"];
 const CAPTIONS = [
@@ -192,13 +237,43 @@ const CAPTIONS = [
   "subject",
   "Keywords",
   "ObjectName",
+  "ImageTitle",
+  "Label",
+  "hierarchicalSubject",
+  "weightedFlatSubject",
+  "LastKeywordXMP",
+  "LastKeywordIPTC",
+  "TagsList",
+  "Event",
 ];
-const COMMENTS = ["Comment", "UserComment", "XPComment"];
+const COMMENTS = ["Comment", "UserComment", "XPComment", "Instructions"];
+/** Face and image regions: their names are read out as RegionName; the
+ * rest of them (shapes, types) says nothing more. */
+const REGIONS = ["Regions", "ImageRegion"];
 const OTHER_TEXT_KEYS = new Set([
   ...NAMES,
   ...CONTACTS,
   ...CAPTIONS,
   ...COMMENTS,
+  ...REGIONS,
+]);
+/** Other text about the picture or who made it, quoted as it is: file
+ * names and paths, a nickname, links, a job title. */
+const TEXT_KEYS = new Set([
+  "DocumentName",
+  "PageName",
+  "PreservedFileName",
+  "RawFileName",
+  "OriginalFileName",
+  "Nickname",
+  "BaseURL",
+  "WebStatement",
+  "UsageTerms",
+  "Source",
+  "source",
+  "AuthorsPosition",
+  "OrganisationInImageName",
+  "ArtworkOrObject",
 ]);
 /** IPTC's own bookkeeping: not about the picture or anyone. */
 const IPTC_BOOKKEEPING = new Set([
@@ -223,7 +298,7 @@ function groupOf(key: string, block: Block): Group | null {
   if (DATE_KEYS.has(key)) return "dates";
   if (SOFTWARE_KEYS.has(key)) return "software";
   if (ID_KEYS.has(key)) return "ids";
-  if (OTHER_TEXT_KEYS.has(key)) return "other-text";
+  if (OTHER_TEXT_KEYS.has(key) || TEXT_KEYS.has(key)) return "other-text";
   if (block === "text") {
     if (/software|generator/i.test(key)) return "software";
     if (/time|date/i.test(key)) return "dates";
@@ -258,22 +333,66 @@ export function momentOf(v: unknown): Moment | null {
       text,
     );
   if (!m) return null;
-  const month = Number(m[2]);
-  const day = Number(m[3]);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  const out: Moment = { year: Number(m[1]), month, day };
+  const out: Moment = {
+    year: Number(m[1]),
+    month: Number(m[2]),
+    day: Number(m[3]),
+  };
   if (m[4] !== undefined) {
     out.hour = Number(m[4]);
     out.minute = Number(m[5]);
     out.second = Number(m[6] ?? 0);
     if (m[7]) out.utc = true;
   }
-  return out;
+  return realMoment(out) ? out : null;
+}
+
+/** Whether a moment is a real calendar day and time: no 31 Feb, no 25:61. */
+export function realMoment(m: Moment): boolean {
+  const { year, month, day } = m;
+  if (![year, month, day].every(Number.isInteger)) return false;
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (day > (days[month - 1] ?? 0)) return false;
+  if (m.hour === undefined) return true;
+  const { hour, minute = 0, second = 0 } = m;
+  return (
+    [hour, minute, second].every(Number.isInteger) &&
+    hour >= 0 &&
+    hour <= 23 &&
+    minute >= 0 &&
+    minute <= 59 &&
+    second >= 0 &&
+    second <= 60 // a leap second
+  );
 }
 
 /** A label's ISO time ("2026-10-25T14:46:19.830385961Z") in UTC. */
 export function utcMoment(when: string | null): Moment | null {
   if (!when) return null;
+  // Date.parse rolls 31 Feb over to 3 Mar: check the written parts first.
+  const parts =
+    /^\s*([+-]?\d{4,6})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(
+      when,
+    );
+  if (
+    parts &&
+    !realMoment({
+      year: Number(parts[1]),
+      month: Number(parts[2]),
+      day: Number(parts[3]),
+      ...(parts[4] !== undefined
+        ? {
+            hour: Number(parts[4]),
+            minute: Number(parts[5]),
+            second: Number(parts[6] ?? 0),
+          }
+        : {}),
+    })
+  ) {
+    return null;
+  }
   // Date reads milliseconds at most.
   const ms = Date.parse(when.trim().replace(/(\.\d{3})\d+/, "$1"));
   if (Number.isNaN(ms)) return null;
@@ -304,9 +423,16 @@ function degrees(value: unknown, ref: unknown): number | undefined {
   } else return undefined;
   if (!parts.length || parts.some((n) => !Number.isFinite(n))) return undefined;
   const [d = 0, m = 0, s = 0] = parts;
+  // Minutes and seconds are under 60; only a lone number can be negative.
+  if (parts.length > 1 && (d < 0 || m < 0 || m >= 60 || s < 0 || s >= 60))
+    return undefined;
   const abs = d + m / 60 + s / 3600;
   return hemisphere === "S" || hemisphere === "W" ? -abs : abs;
 }
+
+/** A real place on Earth: latitude within ±90°, longitude within ±180°. */
+const onEarth = (lat: number, lon: number) =>
+  Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
 
 /** Whether two moments name the same date and time (zone aside). */
 const sameMoment = (a: Moment, b: Moment) =>
@@ -332,7 +458,7 @@ export function pngTime(b: Uint8Array): Moment | null {
       second: d[6] ?? 0,
       utc: true,
     };
-    return out.month >= 1 && out.month <= 12 && out.day >= 1 ? out : null;
+    return realMoment(out) ? out : null;
   } catch {
     return null;
   }
@@ -364,7 +490,7 @@ export function metaFindings(
     block === "text" ? textFrom : BLOCK_NAMES[block];
   const addField = (group: Group, field: Field) => {
     const list = fields.get(group) ?? [];
-    list.push(field);
+    list.push({ ...field, value: fieldValue(field.value) });
     fields.set(group, list);
   };
   const guids: string[] = [];
@@ -373,7 +499,9 @@ export function metaFindings(
     const group = groupOf(e.key, e.block);
     const value = asText(e.value);
     if (group) {
-      byGroup.set(group, [...(byGroup.get(group) ?? []), e]);
+      const list = byGroup.get(group);
+      if (list) list.push(e);
+      else byGroup.set(group, [e]);
       if (value !== null)
         addField(group, { name: e.key, value, from: from(e.block) });
     }
@@ -400,10 +528,15 @@ export function metaFindings(
     return out;
   };
   const pick = (m: Meta, keys: string[]) =>
-    unique(keys.flatMap((k) => texts(m[k]))).map(quote);
+    unique(keys.flatMap((k) => texts(m[k])).filter(sayable)).map(quote);
+  /** The first text of a value, if a sentence can quote it. */
+  const first = (v: unknown) => texts(v).filter(sayable)[0];
   const sentences = new Map<Group, string[]>();
-  const say = (group: Group, sentence: string) =>
-    sentences.set(group, [...(sentences.get(group) ?? []), sentence]);
+  const say = (group: Group, sentence: string) => {
+    const list = sentences.get(group);
+    if (list) list.push(sentence);
+    else sentences.set(group, [sentence]);
+  };
 
   // AI source.
   const source = xmpSource(read);
@@ -416,7 +549,7 @@ export function metaFindings(
     const lon = degrees(loc["GPSLongitude"], loc["GPSLongitudeRef"]);
     const places = pick(loc, PLACES);
     if (!places.length) places.push(...pick(loc, ["CountryCode"]));
-    if (lat !== undefined && lon !== undefined)
+    if (lat !== undefined && lon !== undefined && onEarth(lat, lon))
       say("location", en.location.gps(lat, lon));
     else if (!places.length) say("location", en.location.gpsUnreadable);
     if (places.length) say("location", en.location.places(places));
@@ -425,46 +558,53 @@ export function metaFindings(
   // Device.
   const dev = meta("device");
   if (byGroup.has("device")) {
-    const make = texts(dev["Make"])[0];
-    const model = texts(dev["Model"])[0];
+    const make = first(dev["Make"]);
+    const model = first(dev["Model"]);
     // "Canon EOS R6", not "Canon Canon EOS R6".
     const repeats = make && model?.toLowerCase().startsWith(make.toLowerCase());
     const camera =
       make && model && !repeats
         ? `${make} ${model}`
-        : (model ?? make ?? texts(dev["HostComputer"])[0]);
-    const lens = texts(dev["LensModel"])[0] ?? texts(dev["Lens"])[0];
+        : (model ?? make ?? first(dev["HostComputer"]));
+    const lens = first(dev["LensModel"]) ?? first(dev["Lens"]);
     const serials = pick(dev, SERIALS);
     if (camera) say("device", en.device.camera(quote(camera)));
     if (lens) say("device", en.device.lens(quote(lens)));
     if (serials.length) say("device", en.device.serials(serials));
     if (!sentences.has("device")) {
-      say("device", en.device.camera(pick(dev, [...DEVICE_KEYS]).join(", ")));
+      const any = pick(dev, [...DEVICE_KEYS]);
+      say(
+        "device",
+        any.length ? en.device.camera(any.join(", ")) : en.device.unnamed,
+      );
     }
   }
 
   // Dates.
   const dat = meta("dates");
   if (byGroup.has("dates") || time) {
-    const first = (keys: string[]) => {
+    const firstMoment = (keys: string[]) => {
       for (const k of keys) {
         const m = momentOf(dat[k]);
         if (m) return m;
       }
       return null;
     };
-    const taken = first(TAKEN);
-    const saved = first(SAVED) ?? time;
+    // A date that isn't a real day and time is said without it.
+    const has = (keys: string[]) => keys.some((k) => texts(dat[k]).length);
+    const taken = firstMoment(TAKEN);
+    const saved = firstMoment(SAVED) ?? time;
     if (taken) say("dates", en.dates.taken(taken));
+    else if (has(TAKEN)) say("dates", en.dates.takenUnreadable);
     // The same moment twice (Exif's and a PNG's tIME) is said once.
     if (saved && !(taken && sameMoment(taken, saved))) {
       say("dates", en.dates.saved(saved));
-    }
-    if (!taken && !saved) {
+    } else if (!saved && has(SAVED)) say("dates", en.dates.savedUnreadable);
+    if (!sentences.has("dates")) {
       const any = (byGroup.get("dates") ?? [])
         .map((e) => asText(e.value))
-        .find(Boolean);
-      say("dates", en.dates.other(quote(any ?? "")));
+        .find((v) => v !== null && sayable(v));
+      say("dates", any ? en.dates.other(quote(any)) : en.dates.unreadable);
     }
   }
 
@@ -485,24 +625,25 @@ export function metaFindings(
         ? [history]
         : []) {
       if (isObject(step))
-        names.push(...texts(step["softwareAgent"]).map(quote));
+        names.push(...texts(step["softwareAgent"]).filter(sayable).map(quote));
     }
     for (const e of byGroup.get("software") ?? []) {
-      if (e.block === "text") names.push(...texts(e.value).map(quote));
+      if (e.block === "text")
+        names.push(...texts(e.value).filter(sayable).map(quote));
     }
     const all = unique(names);
-    say(
-      "software",
-      en.software(all.length ? all : pick(soft, [...SOFTWARE_KEYS])),
-    );
+    const any = all.length ? all : pick(soft, [...SOFTWARE_KEYS]);
+    say("software", any.length ? en.software(any) : en.softwareUnnamed);
   }
 
   // IDs.
-  const idValues = unique([
+  const allIds = unique([
     ...(byGroup.get("ids") ?? []).flatMap((e) => texts(e.value)),
     ...guids,
-  ]).map(quote);
+  ]);
+  const idValues = allIds.filter(sayable).map(quote);
   if (idValues.length) say("ids", en.ids(idValues));
+  else if (allIds.length) say("ids", en.idsUnnamed);
 
   // Other text.
   if (byGroup.has("other-text")) {
@@ -517,8 +658,11 @@ export function metaFindings(
     if (comments.length) say("other-text", en.otherText.comment(comments));
     const rest = (byGroup.get("other-text") ?? [])
       .filter((e) => !OTHER_TEXT_KEYS.has(e.key))
-      .map((e) => `${e.key}: ${quote(asText(e.value) ?? "")}`);
+      .map((e) => `${e.key}: ${quote(asText(e.value) ?? "")}`)
+      .filter(sayable);
     if (rest.length) say("other-text", en.otherText.text(unique(rest)));
+    if (!sentences.has("other-text") && fields.get("other-text")?.length)
+      say("other-text", en.otherText.unnamed);
   }
 
   const out: Finding[] = [];
@@ -595,8 +739,11 @@ export function labelFindings(label: Label, webp: boolean): Finding[] {
 /** The characters of one kind, each once with how often it appears. */
 function charList(hits: CharHit[]): { names: string[]; fields: Field[] } {
   const seen = new Map<number, CharHit[]>();
-  for (const h of hits)
-    seen.set(h.codePoint, [...(seen.get(h.codePoint) ?? []), h]);
+  for (const h of hits) {
+    const list = seen.get(h.codePoint);
+    if (list) list.push(h);
+    else seen.set(h.codePoint, [h]);
+  }
   const names: string[] = [];
   const fields: Field[] = [];
   for (const [cp, list] of seen) {
@@ -605,7 +752,7 @@ function charList(hits: CharHit[]): { names: string[]; fields: Field[] } {
     names.push(en.text.char(first.name, cp, list.length));
     fields.push({
       name: first.name,
-      value: `${first.note}; at ${list.map((h) => h.index).join(", ")}`,
+      value: `${first.note}; ${en.text.at(list.map((h) => h.index))}`,
       from: "Text",
     });
   }
@@ -638,7 +785,7 @@ export function textFindings(
         run.how === "tags"
           ? en.text.decodedTags(quote(run.decoded))
           : en.text.decodedSelectors(quote(run.decoded)),
-      fields: [{ name: run.how, value: run.decoded, from: "Text" }],
+      fields: [{ name: run.how, value: fieldValue(run.decoded), from: "Text" }],
       cleanedBy: "clean",
     });
   }
@@ -674,10 +821,10 @@ export function textFindings(
         cleanedBy: "clean",
       });
     if (extras.sourceUrl) {
-      extra(en.copy.sourceUrl(extras.sourceUrl), [
+      extra(en.copy.sourceUrl(quote(extras.sourceUrl)), [
         {
           name: "SourceURL",
-          value: extras.sourceUrl,
+          value: fieldValue(extras.sourceUrl),
           from: "HTML clipboard header",
         },
       ]);
@@ -697,7 +844,7 @@ export function textFindings(
       if (extras.classes.length) {
         fields.push({
           name: "class",
-          value: extras.classes.join(" "),
+          value: fieldValue(extras.classes.join(" ")),
           from: "HTML fragment",
         });
       }

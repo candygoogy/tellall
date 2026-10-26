@@ -7,16 +7,18 @@ import { csp, headers } from "./build/csp.ts";
 import { examples } from "./build/examples.ts";
 import { licenses } from "./build/licenses.ts";
 
+// Own ports, never reused from another project: dev, and the built page
+// (preview), which the e2e tests use, so both can run at once.
 const PORT = 5317;
+const PREVIEW_PORT = 5318;
 const notices = licenses();
 
 export default defineConfig({
   plugins: [csp(), examples(), notices.page],
-  // Own port, never reused from another project.
   server: { host: "127.0.0.1", port: PORT, strictPort: true },
   preview: {
     host: "127.0.0.1",
-    port: PORT,
+    port: PREVIEW_PORT,
     strictPort: true,
     headers: Object.fromEntries(headers()),
   },

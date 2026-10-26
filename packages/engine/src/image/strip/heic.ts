@@ -44,12 +44,15 @@ import {
   exifTiff,
   find,
   heifLayout,
+  inData,
   itemBytes,
   type Box,
   type Item,
   type Reader,
 } from "../heif.ts";
+import { en } from "../../words/en.ts";
 import { gainMapPacket } from "../gain-map.ts";
+import { technicalOnly } from "../technical.ts";
 import { cleanIcc } from "../icc.ts";
 import { cleanJpegInPlace, isTurned, orientationTiff } from "./jpeg.ts";
 import { KEEP_LABELS, sourceType, type CleanOptions } from "./options.ts";
@@ -197,6 +200,8 @@ function overwrite(out: Uint8Array, item: Item, payload: Uint8Array) {
 
 function blankExif(b: Uint8Array, item: Item, orientation: number) {
   const old = itemBytes(b, item);
+  // Already blank (as a clean copy leaves one too small for a TIFF).
+  if (!old.some((c) => c !== 0)) return old;
   const tiff = exifTiff(old);
   const payload = new Uint8Array(old.length);
   // Keep the offset to the TIFF header, and "Exif\0\0" when that's all it
@@ -214,15 +219,26 @@ function blankExif(b: Uint8Array, item: Item, orientation: number) {
   return payload;
 }
 
-/** Zeros every byte of [from, to) outside the kept spans (sorted). */
+/** Zeros every byte of [from, to) outside the kept spans (in order, none
+ * overlapping). */
 function blankAround(
   out: Uint8Array,
   from: number,
   to: number,
   kept: { from: number; to: number }[],
 ) {
+  // The first span that ends after `from`.
+  let low = 0;
+  let high = kept.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if ((kept[mid]?.to ?? 0) <= from) low = mid + 1;
+    else high = mid;
+  }
   let at = from;
-  for (const span of kept) {
+  for (let n = low; n < kept.length; n++) {
+    const span = kept[n];
+    if (!span) break;
     if (span.to <= at) continue;
     if (span.from >= to) break;
     if (span.from > at) out.fill(0, at, span.from);
@@ -285,8 +301,9 @@ function cleanFileType(out: Uint8Array, box: Box) {
   out.fill(0, last, box.end);
 }
 
-/** A property kept: its words and whatever follows its fields cleaned. */
-function cleanProperty(out: Uint8Array, property: Box) {
+/** A property kept: its words and whatever follows its fields cleaned
+ * (a colour profile left as it is, when `asIs`, if it is one). */
+function cleanProperty(out: Uint8Array, property: Box, asIs = false) {
   const { body, end } = property;
   if (property.type === "colr") {
     const kind = ascii(out, body, body + 4);
@@ -295,6 +312,7 @@ function cleanProperty(out: Uint8Array, property: Box) {
     } else if (kind === "prof" || kind === "rICC") {
       const profile = cleanIcc(out.subarray(body + 4, end));
       if (!profile) return free(out, property);
+      if (asIs) return;
       out.fill(0, body + 4, end);
       out.set(profile, body + 4);
     } else free(out, property);
@@ -339,13 +357,48 @@ export function stripHeic(
       : layout.xmp.filter((item) =>
           ascii(itemBytes(b, item)).includes("DigitalSourceType"),
         );
-  const xmp = layout.xmp.filter((item) => !sourceXmp.includes(item));
+  // Kept as they are only to tell whether there's anything to remove
+  // (options.ts): Exif with only technical tags, or every item read.
+  const asIsMeta = opts.keepRead
+    ? [...layout.exif, ...layout.xmp]
+    : opts.drawnAsIs
+      ? layout.exif.filter((item) => {
+          const tiff = exifTiff(itemBytes(b, item));
+          return tiff !== null && technicalOnly(tiff);
+        })
+      : [];
+  const keptXmp = new Set([...sourceXmp, ...asIsMeta]);
+  const xmp = layout.xmp.filter((item) => !keptXmp.has(item));
+  const exifs = exif.filter((item) => !keptXmp.has(item));
 
-  // The bytes the picture is drawn from (and the XMP kept), in file order.
-  const kept = [...layout.pictures, ...layout.helperXmp, ...sourceXmp]
+  // The picture's bytes are data, in mdat or idat: a picture said to be
+  // anywhere else would be blanked with the box it's in.
+  const mdats = top.filter((x) => x.type === "mdat");
+  if (
+    [...layout.pictures, ...layout.helperXmp, ...sourceXmp].some(
+      (item) => !inData(item, mdats),
+    )
+  ) {
+    throw new CantClean(en.clean.heicPictureOutside);
+  }
+
+  // The bytes the picture is drawn from (and the XMP kept), in file order,
+  // those that overlap or touch made one.
+  const kept: { from: number; to: number }[] = [];
+  const spans = [
+    ...layout.pictures,
+    ...layout.helperXmp,
+    ...sourceXmp,
+    ...asIsMeta,
+  ]
     .flatMap((item) => item.extents)
     .map((x) => ({ from: x.offset, to: x.offset + x.length }))
     .sort((x, y) => x.from - y.from);
+  for (const span of spans) {
+    const last = kept.at(-1);
+    if (last && span.from <= last.to) last.to = Math.max(last.to, span.to);
+    else kept.push(span);
+  }
 
   for (const box of top) {
     if (box === meta) continue;
@@ -396,7 +449,7 @@ export function stripHeic(
         }
         for (const property of r.boxes(part.body, part.end)) {
           if (!PROPERTIES.has(property.type)) free(out, property);
-          else cleanProperty(out, property);
+          else cleanProperty(out, property, opts.drawnAsIs);
         }
       }
     }
@@ -406,6 +459,7 @@ export function stripHeic(
     ...layout.pictures,
     ...layout.helperXmp,
     ...sourceXmp,
+    ...asIsMeta,
   ]);
   for (const item of layout.items) {
     if (pictures.has(item)) continue;
@@ -419,7 +473,7 @@ export function stripHeic(
       overwrite(out, item, cleanJpegInPlace(itemBytes(b, item)));
     }
   }
-  for (const item of exif) {
+  for (const item of exifs) {
     overwrite(out, item, blankExif(b, item, orientation));
   }
   for (const item of xmp) {

@@ -1,6 +1,7 @@
 // What a formatted (HTML) copy carries besides the words (spec §4 "Text").
-// Ported from Docs/tellall/textcheck/xcheck.py html_fragment(). No DOM or
-// Node APIs: a few regexes, as there.
+// Ported from Docs/tellall/textcheck/xcheck.py html_fragment(), with its
+// regexes replaced by a small linear tag scan, so attributes are read only
+// inside real tags and long runs of "<" stay fast. No DOM or Node APIs.
 
 export interface CopyExtras {
   /** The `SourceURL:` the browser put in the clipboard header (the chat's link), if any. */
@@ -33,32 +34,145 @@ export function scanHtml(html: string): CopyExtras {
     start && end ? sliceUtf8(html, Number(start[1]), Number(end[1])) : html;
 
   const classes = new Set<string>();
-  for (const m of frag.matchAll(/class="([^"]*)"/g)) {
-    for (const c of m[1].split(/\s+/)) if (c) classes.add(c);
-  }
   const ids = new Set<string>();
-  for (const m of frag.matchAll(/\sid="([^"]*)"|\sid='([^']*)'/g)) {
-    const id = m[1] ?? m[2];
-    if (id.length > 12 && /\d/.test(id)) ids.add(id);
-  }
   let styles = 0;
-  for (const m of frag.matchAll(
-    /<[a-zA-Z][^>]*?\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/g,
-  )) {
-    if ((m[1] ?? m[2] ?? "").trim()) styles++;
+  let hiddenStyled = false;
+  const { tags, text, css } = tokenize(frag);
+  for (const attrs of tags) {
+    for (const c of (attrs.get("class") ?? "").split(/\s+/))
+      if (c) classes.add(c);
+    const id = attrs.get("id");
+    if (id && id.length > 12 && /\d/.test(id)) ids.add(id);
+    const style = attrs.get("style");
+    if (style?.trim()) styles++;
+    if (style && HIDDEN_STYLE.test(style)) hiddenStyled = true;
   }
+  if (css.some((c) => HIDDEN_STYLE.test(c))) hiddenStyled = true;
   return {
     sourceUrl: /SourceURL:(\S+)/.exec(header)?.[1] ?? null,
     ids: [...ids],
     classes: [...classes].sort(),
     styles,
-    // `font-size: 0` (any unit), but not `0.875rem`.
-    hiddenStyled:
-      /display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0+(?:\.0+)?(?![\d.])/i.test(
-        frag,
-      ),
-    text: unescape(frag.replace(/<[^>]+>/g, "")),
+    hiddenStyled,
+    text: unescape(text),
   };
+}
+
+// `font-size: 0` (any unit), but not `0.875rem`.
+const HIDDEN_STYLE =
+  /display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0+(?:\.0+)?(?![\d.])/i;
+
+const isSpace = (c: string) =>
+  c === " " || c === "\t" || c === "\n" || c === "\r" || c === "\f";
+const isLetter = (c: string | undefined) =>
+  c !== undefined && ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z"));
+
+/**
+ * One pass over the fragment, in linear time: the attributes of each start
+ * tag (names lower-cased, values unescaped), the text between tags, and
+ * the CSS inside `<style>` elements. Only a real tag (`<` and a letter) has
+ * attributes; comments, `</…>` and `<!…>` are skipped; a `<` that starts
+ * no tag, and a tag never closed, are text, as before.
+ */
+function tokenize(html: string): {
+  tags: Map<string, string>[];
+  text: string;
+  css: string[];
+} {
+  const tags: Map<string, string>[] = [];
+  const css: string[] = [];
+  let text = "";
+  let i = 0;
+  const n = html.length;
+  while (i < n) {
+    const lt = html.indexOf("<", i);
+    if (lt < 0) break;
+    text += html.slice(i, lt);
+    const c = html[lt + 1];
+    if (html.startsWith("<!--", lt)) {
+      const end = html.indexOf("-->", lt + 4);
+      i = end < 0 ? n : end + 3;
+      continue;
+    }
+    if (!isLetter(c) && c !== "/" && c !== "!" && c !== "?") {
+      text += "<";
+      i = lt + 1;
+      continue;
+    }
+    // An end tag, doctype or processing instruction has no attributes.
+    const gt = isLetter(c) ? -1 : html.indexOf(">", lt + 1);
+    const tag = isLetter(c) ? startTag(html, lt + 1) : null;
+    if (gt < 0 && !tag) {
+      // Never closed: the rest is text.
+      text += html.slice(lt);
+      return { tags, text, css };
+    }
+    if (!tag) {
+      i = gt + 1;
+      continue;
+    }
+    tags.push(tag.attrs);
+    i = tag.end;
+    // A <style> or <script> holds code, not words, up to its end tag.
+    if (tag.name === "style" || tag.name === "script") {
+      const close = new RegExp(`</${tag.name}`, "gi");
+      close.lastIndex = i;
+      const end = close.exec(html)?.index ?? n;
+      if (tag.name === "style") css.push(html.slice(i, end));
+      i = end;
+    }
+  }
+  if (i < n) text += html.slice(i);
+  return { tags, text, css };
+}
+
+/** A start tag from just after its `<`: name, attributes and the index
+ * after its `>`; null if it never closes. */
+function startTag(
+  html: string,
+  from: number,
+): { name: string; attrs: Map<string, string>; end: number } | null {
+  const n = html.length;
+  let i = from;
+  while (i < n && !isSpace(html[i] ?? "") && html[i] !== "/" && html[i] !== ">")
+    i++;
+  const name = html.slice(from, i).toLowerCase();
+  const attrs = new Map<string, string>();
+  for (;;) {
+    while (i < n && (isSpace(html[i] ?? "") || html[i] === "/")) i++;
+    if (i >= n) return null;
+    if (html[i] === ">") return { name, attrs, end: i + 1 };
+    const start = i;
+    i++; // a name may start with "="
+    while (
+      i < n &&
+      !isSpace(html[i] ?? "") &&
+      html[i] !== "/" &&
+      html[i] !== ">" &&
+      html[i] !== "="
+    )
+      i++;
+    const key = html.slice(start, i).toLowerCase();
+    while (i < n && isSpace(html[i] ?? "")) i++;
+    let value = "";
+    if (html[i] === "=") {
+      i++;
+      while (i < n && isSpace(html[i] ?? "")) i++;
+      const q = html[i];
+      if (q === '"' || q === "'") {
+        const close = html.indexOf(q, i + 1);
+        if (close < 0) return null;
+        value = html.slice(i + 1, close);
+        i = close + 1;
+      } else {
+        const v = i;
+        while (i < n && !isSpace(html[i] ?? "") && html[i] !== ">") i++;
+        value = html.slice(v, i);
+      }
+    }
+    // The first of a repeated attribute wins, as in a browser.
+    if (!attrs.has(key)) attrs.set(key, unescape(value));
+  }
 }
 
 /** `raw[from:to].decode("utf-8", "replace")` on the string's UTF-8 bytes. */

@@ -2,13 +2,29 @@
   "name": "tellall",
   "version": "0.1.0",
   "description": "See in plain sentences what an image or a text tells about you, and make clean copies.",
+  "keywords": [
+    "privacy",
+    "metadata",
+    "exif",
+    "gps",
+    "c2pa",
+    "content-credentials",
+    "ai-label",
+    "hidden-characters",
+    "clean",
+    "cli"
+  ],
   "license": "MIT",
+  "author": "candygoogy",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/candygoogy/tellall.git",
     "directory": "packages/cli"
   },
   "homepage": "https://tellall.candygoogy.dev",
+  "bugs": {
+    "url": "https://github.com/candygoogy/tellall/issues"
+  },
   "type": "module",
   "bin": {
     "tellall": "dist/tellall.js"
@@ -19,18 +35,16 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "prepack": "node build.mjs"
   },
   "dependencies": {
     "@trustnxt/c2pa-ts": "0.14.1",
     "exifr": "7.1.3",
     "fflate": "0.8.3",
     "reflect-metadata": "0.2.2"
-  },
-  "devDependencies": {
-    "@tellall/engine": "*"
   }
 }

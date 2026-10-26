@@ -50,7 +50,7 @@ const EOI = 0xd9;
 /** A JPEG XT segment's box instance (En), when it's the first one of a
  * C2PA manifest store: "JP", En, the sequence number, then a jumb box
  * whose jumd says "c2pa". */
-function c2paInstance(b: Uint8Array, body: number): number | null {
+export function c2paInstance(b: Uint8Array, body: number): number | null {
   if (!startsWith(b, body, "JP") || !startsWith(b, body + 12, "jumb")) {
     return null;
   }

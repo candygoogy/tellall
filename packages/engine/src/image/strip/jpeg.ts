@@ -8,7 +8,8 @@
 // (APP0), without its thumbnail. The profile and Adobe's segment count
 // only before the first scan, where decoders read them. Everything else
 // goes, wherever it sits, between scans too: Exif and XMP (APP1), the
-// index of extra pictures (MPF) along with those pictures after the end,
+// index of extra pictures (MPF) along with those pictures after the end
+// (but a gain map, below),
 // Photoshop's IPTC (APP13), comments (COM), the number of lines (DNL,
 // which decoders don't use), and any segment this list doesn't name. A
 // photo turned by its Exif gets a minimal Exif back that holds only that
@@ -16,14 +17,27 @@
 // end marker back.
 //
 // An AI label (Content Credentials, C2PA) is APP11 segments holding JUMBF
-// boxes, each with "jumb" in its first 64 bytes (a label split over
-// several segments repeats its box header in each). With labels kept they
-// all stay, byte for byte, where they were; removed, they all go. With
+// boxes before the first scan: the JPEG XT box instance whose first box
+// is a C2PA manifest store (a label split over several segments repeats
+// its box header in each). With labels kept they all stay, byte for byte,
+// where they were; removed, they all go. Any other JUMBF is metadata. With
 // labels kept and a DigitalSourceType given, an APP1 XMP packet holding
-// only that comes back too (xmp-min.ts), after JFIF and the turn.
-import { ascii, startsWith } from "../../bytes.ts";
+// only that comes back too (xmp-min.ts), after JFIF and the turn; one the
+// file already has that holds only it stays where it is, byte for byte.
+//
+// An HDR gain map stored after the picture (Ultra HDR: a JPEG with ISO
+// 21496-1's block or a gain map's XMP, listed in MPF) is kept, cleaned on
+// its own the same way, with its gain map block and its XMP written anew
+// from its values (gain-map.ts); the picture keeps its own ISO 21496-1
+// block and gets an MPF written anew that lists only it and its gain
+// maps. Any other extra picture goes.
+import { startsWith } from "../../bytes.ts";
 import { cleanIcc } from "../icc.ts";
-import { minimalXmpBytes } from "../xmp-min.ts";
+import { c2paInstance } from "../../c2pa/locate.ts";
+import { gainMapPacket } from "../gain-map.ts";
+import { mpfOf, mpfPayload, type MpImage } from "../mpf.ts";
+import { technicalOnly } from "../technical.ts";
+import { minimalXmpBytes, sourceOnly } from "../xmp-min.ts";
 import { KEEP_LABELS, sourceType, type CleanOptions } from "./options.ts";
 
 const SOI = 0xd8;
@@ -47,9 +61,11 @@ const TABLES = new Set([
   0xce, 0xcf, 0xdb, 0xdd, 0xde, 0xdf,
 ]);
 const ICC = "ICC_PROFILE\0";
+/** ISO 21496-1's gain map block (APP2), and the most it holds after its
+ * name: a few numbers for each of three channels. */
+const ISO = "urn:iso:std:iso:ts:21496:-1\0";
+const ISO_MOST = 512;
 const XMP = "http://ns.adobe.com/xap/1.0/\0";
-/** How far into an APP11 segment a label's "jumb" may sit. */
-const LABEL_REACH = 64;
 /** The most profile one APP2 segment holds, after its 14-byte header. */
 const ICC_PIECE = 65_519;
 
@@ -85,7 +101,12 @@ function scanEnd(b: Uint8Array, from: number): number {
  * included. Stops at the end marker, or where the file is cut short (a
  * segment running past the end is left out). Throws when the segments
  * before the first scan don't add up. */
-export function segments(b: Uint8Array): { list: Segment[]; ended: boolean } {
+export function segments(b: Uint8Array): {
+  list: Segment[];
+  ended: boolean;
+  /** Just after the end marker; where the walk stopped, when there's none. */
+  end: number;
+} {
   if (b[0] !== 0xff || b[1] !== SOI) throw new Error("Not a JPEG.");
   const list: Segment[] = [];
   let late = false;
@@ -104,7 +125,7 @@ export function segments(b: Uint8Array): { list: Segment[]; ended: boolean } {
       i++; // fill byte
       continue;
     }
-    if (marker === EOI) return { list, ended: true };
+    if (marker === EOI) return { list, ended: true, end: i + 2 };
     // Markers without a length (a restart, TEM) carry nothing: skipped.
     if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
       i += 2;
@@ -128,7 +149,7 @@ export function segments(b: Uint8Array): { list: Segment[]; ended: boolean } {
     list.push({ marker, start: i, end, body: i + 4, late });
     i = end;
   }
-  return { list, ended: false };
+  return { list, ended: false, end: Math.min(i, b.length) };
 }
 
 /** A minimal Exif block (TIFF) holding only the Orientation tag. */
@@ -202,10 +223,26 @@ function fits(b: Uint8Array, s: Segment): boolean {
   return length >= 6 && length === 6 + 3 * at(5);
 }
 
-/** An AI label's segment: APP11 with a JUMBF box ("jumb") near its start. */
-const isLabel = (b: Uint8Array, s: Segment) =>
-  s.marker === APP11 &&
-  ascii(b, s.body, Math.min(s.end, s.body + LABEL_REACH)).includes("jumb");
+/** The AI label's segments: APP11 before the first scan, the JPEG XT
+ * boxes of the one instance whose first box is a C2PA manifest store (as
+ * c2pa/locate.ts finds the label). Any other JUMBF is metadata. */
+function labelSegments(b: Uint8Array, list: Segment[]): Set<Segment> {
+  const out = new Set<Segment>();
+  let instance: number | null = null;
+  for (const s of list) {
+    if (s.late || s.marker !== APP11) continue;
+    instance ??= c2paInstance(b, s.body);
+    if (
+      instance !== null &&
+      s.body + 4 <= s.end &&
+      startsWith(b, s.body, "JP") &&
+      (((b[s.body + 2] ?? 0) << 8) | (b[s.body + 3] ?? 0)) === instance
+    ) {
+      out.add(s);
+    }
+  }
+  return out;
+}
 
 const isIcc = (b: Uint8Array, s: Segment) =>
   s.marker === APP2 && startsWith(b, s.body, ICC);
@@ -247,26 +284,204 @@ function iccSegments(profile: Uint8Array): Uint8Array[] {
   );
 }
 
+/** What a clean copy keeps besides the picture: the label's segments,
+ * an XMP packet holding only the source type (kept whole), and, for a
+ * picture with a gain map or for the gain map itself, what draws it. */
+interface Keeping {
+  labels: Set<Segment>;
+  source?: Segment | undefined;
+  /** Keep ISO 21496-1's gain map block, and the gain map's own XMP
+   * written anew from its values (gain-map.ts). */
+  gainMap?: boolean;
+  /** Keep the profile and Adobe's segment as they are (options.ts). */
+  asIs?: boolean;
+  /** An Exif segment holding only technical tags, kept as it is (with
+   * `asIs`): it already holds any turn. */
+  technical?: Segment | undefined;
+  /** Keep every block tellall reads as it is (options.ts). */
+  read?: boolean;
+  /** The MPF segment, kept as it is (with `asIs`). */
+  mpf?: Segment | undefined;
+}
+
+const EXIF = "Exif\0\0";
+const isExif = (b: Uint8Array, s: Segment) =>
+  s.marker === APP1 && startsWith(b, s.body, EXIF);
+const isXmp = (b: Uint8Array, s: Segment) =>
+  s.marker === APP1 && startsWith(b, s.body, XMP);
+/** The blocks image/read.ts reads: Exif, XMP (extended too), Photoshop's
+ * IPTC, comments. */
+const isRead = (b: Uint8Array, s: Segment) =>
+  (s.marker === APP1 &&
+    (startsWith(b, s.body, EXIF) ||
+      startsWith(b, s.body, "http://ns.adobe.com/xap/1.0/\0") ||
+      startsWith(b, s.body, "http://ns.adobe.com/xmp/extension/\0"))) ||
+  (s.marker === 0xed && startsWith(b, s.body, "Photoshop 3.0\0")) ||
+  s.marker === 0xfe;
+
+const NOTHING: Keeping = { labels: new Set() };
+
 /** What a segment's content becomes in the clean copy (marker and length
  * aside): itself, a payload written anew, or null to drop it. The colour
- * profile isn't decided here, and a label is kept only when `labels`. */
+ * profile isn't decided here. */
 function keep(
   b: Uint8Array,
   s: Segment,
   first: boolean,
-  labels = false,
+  keeping: Keeping = NOTHING,
 ): "whole" | Uint8Array | null {
   const { marker, body, end } = s;
   if (marker === SOS || TABLES.has(marker)) return fits(b, s) ? "whole" : null;
-  if (labels && isLabel(b, s)) return "whole";
+  if (keeping.labels.has(s) || keeping.source === s) return "whole";
+  if (keeping.technical === s || keeping.mpf === s) return "whole";
+  if (keeping.read && isRead(b, s)) return "whole";
   // JFIF only as the first segment, where it belongs.
   if (marker === APP0 && first && end - body >= 14) {
     if (startsWith(b, body, "JFIF\0")) return jfifPayload(b, s);
   }
   if (marker === APP14 && !s.late && end - body >= 12) {
-    if (startsWith(b, body, "Adobe")) return adobePayload(b, s);
+    if (startsWith(b, body, "Adobe")) {
+      return keeping.asIs && end - body === 12 ? "whole" : adobePayload(b, s);
+    }
+  }
+  if (keeping.gainMap && !s.late) {
+    // ISO 21496-1's block holds only numbers: a version, or the gain
+    // map's values.
+    if (isIso(b, s) && end - body <= ISO.length + ISO_MOST) return "whole";
+    if (marker === APP1 && startsWith(b, body, XMP)) {
+      const packet = gainMapPacket(b.subarray(body + XMP.length, end));
+      if (packet && keeping.asIs) return "whole";
+      return packet && join([new TextEncoder().encode(XMP), packet]);
+    }
   }
   return null;
+}
+
+const isIso = (b: Uint8Array, s: Segment) =>
+  s.marker === APP2 && startsWith(b, s.body, ISO);
+
+/** Whether a JPEG is an HDR gain map: it carries ISO 21496-1's block or a
+ * gain map's XMP. */
+function isGainMap(b: Uint8Array, list: Segment[]): boolean {
+  return list.some(
+    (s) =>
+      !s.late &&
+      (isIso(b, s) ||
+        (s.marker === APP1 &&
+          startsWith(b, s.body, XMP) &&
+          gainMapPacket(b.subarray(s.body + XMP.length, s.end)) !== null)),
+  );
+}
+
+/** A gain map stored after the picture (Ultra HDR), cleaned on its own;
+ * null when it isn't one, or can't be cleaned. */
+function cleanGainMap(b: Uint8Array, opts: CleanOptions): Uint8Array | null {
+  try {
+    const { list } = segments(b);
+    if (!list.some((s) => s.marker === SOS) || !isGainMap(b, list)) {
+      return null;
+    }
+    const keeping = {
+      ...keepingFor(b, list, { keepLabels: false, ...asIsOf(opts) }),
+      gainMap: true,
+    };
+    return join(parts(b, list, 1, undefined, keeping));
+  } catch {
+    return null;
+  }
+}
+
+/** The extra pictures a JPEG's MPF lists that are gain maps, cleaned. */
+function gainMaps(b: Uint8Array, list: Segment[], opts: CleanOptions) {
+  const images: MpImage[] = [];
+  const bytes: Uint8Array[] = [];
+  for (const image of mpfOf(b, list)?.extra ?? []) {
+    const clean = cleanGainMap(
+      b.subarray(image.offset, image.offset + image.length),
+      opts,
+    );
+    if (!clean) continue;
+    images.push({ ...image, length: clean.length });
+    bytes.push(clean);
+  }
+  return { images, bytes };
+}
+
+/** How many HDR gain maps a JPEG carries: those its MPF lists, else one
+ * right after its end. */
+export function gainMapCount(b: Uint8Array): number {
+  const isOne = (sub: Uint8Array) => {
+    try {
+      return isGainMap(sub, segments(sub).list);
+    } catch {
+      return false;
+    }
+  };
+  try {
+    const { list, end } = segments(b);
+    const listed = (mpfOf(b, list)?.extra ?? []).filter((image) =>
+      isOne(b.subarray(image.offset, image.offset + image.length)),
+    ).length;
+    if (listed || b[end] !== 0xff || b[end + 1] !== SOI) return listed;
+    return isOne(b.subarray(end)) ? 1 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** The clean copy's segments, from SOI to EOI. `source` is the source type
+ * to carry in a minimal XMP packet, unless a packet holding only it is
+ * kept whole; `extra` is a segment to add with the turn (the MPF). */
+function parts(
+  b: Uint8Array,
+  list: Segment[],
+  orientation: number,
+  source: string | undefined,
+  keeping: Keeping,
+  extra?: Uint8Array,
+): Uint8Array[] {
+  const pieces = iccPieces(b, list);
+  const profile = pieces && iccProfile(b, pieces);
+  const firstIcc = list.find((s) => isIcc(b, s));
+  const kept: Uint8Array[] = [b.subarray(0, 2)];
+  let afterJfif = 1;
+  list.forEach((s, n) => {
+    // The profile, written anew where its first piece was.
+    if (isIcc(b, s)) {
+      if (keeping.asIs) {
+        if (profile && pieces.includes(s))
+          kept.push(b.subarray(s.start, s.end));
+      } else if (profile && s === firstIcc) kept.push(...iccSegments(profile));
+      return;
+    }
+    const part = keep(b, s, n === 0, keeping);
+    if (!part) return;
+    kept.push(
+      part === "whole" ? b.subarray(s.start, s.end) : segment(s.marker, part),
+    );
+    if (s.marker === APP0) afterJfif = kept.length;
+  });
+  const added: Uint8Array[] = [];
+  // Exif or XMP kept as it is already says what the added ones would.
+  const exifKept =
+    keeping.technical || (keeping.read && list.some((s) => isExif(b, s)));
+  const xmpKept = keeping.read && list.some((s) => isXmp(b, s));
+  if (isTurned(orientation) && !exifKept) {
+    added.push(segment(APP1, [...EXIF_HEAD, ...orientationTiff(orientation)]));
+  }
+  if (source !== undefined && !keeping.source && !xmpKept) {
+    const payload = join([
+      new TextEncoder().encode(XMP),
+      minimalXmpBytes(source),
+    ]);
+    // One segment holds at most 65,533 bytes; a longer value isn't one.
+    if (payload.length <= 0xffff - 2) added.push(segment(APP1, payload));
+  }
+  if (extra) added.push(extra);
+  kept.splice(afterJfif, 0, ...added);
+  // The end marker, always: after a file cut short too.
+  kept.push(new Uint8Array([0xff, EOI]));
+  return kept;
 }
 
 export function stripJpeg(
@@ -278,41 +493,83 @@ export function stripJpeg(
   if (!list.some((s) => s.marker === SOS)) {
     throw new Error("The JPEG ends before its picture starts.");
   }
-  const pieces = iccPieces(b, list);
-  const profile = pieces && iccProfile(b, pieces);
-  const firstIcc = list.find((s) => isIcc(b, s));
-  const kept: Uint8Array[] = [b.subarray(0, 2)];
-  let afterJfif = 1;
-  list.forEach((s, n) => {
-    // The profile, written anew where its first piece was.
-    if (isIcc(b, s)) {
-      if (profile && s === firstIcc) kept.push(...iccSegments(profile));
-      return;
-    }
-    const part = keep(b, s, n === 0, opts.keepLabels);
-    if (!part) return;
-    kept.push(
-      part === "whole" ? b.subarray(s.start, s.end) : segment(s.marker, part),
-    );
-    if (s.marker === APP0) afterJfif = kept.length;
-  });
-  const added: Uint8Array[] = [];
-  if (isTurned(orientation)) {
-    added.push(segment(APP1, [...EXIF_HEAD, ...orientationTiff(orientation)]));
-  }
   const source = sourceType(opts);
-  if (source !== undefined) {
-    const payload = join([
-      new TextEncoder().encode(XMP),
-      minimalXmpBytes(source),
-    ]);
-    // One segment holds at most 65,533 bytes; a longer value isn't one.
-    if (payload.length <= 0xffff - 2) added.push(segment(APP1, payload));
+  const keeping = keepingFor(b, list, opts);
+  const maps = gainMaps(b, list, opts);
+  if (!maps.images.length) {
+    return join(parts(b, list, orientation, source, keeping));
   }
-  kept.splice(afterJfif, 0, ...added);
-  // The end marker, always: after a file cut short too.
-  kept.push(new Uint8Array([0xff, EOI]));
-  return join(kept);
+  // With a gain map: its block in the picture kept too, a new MPF listing
+  // the picture and its gain maps, and the gain maps after the end.
+  keeping.gainMap = true;
+  if (keeping.asIs) {
+    // Nothing moved: the MPF as it is still points where it did.
+    keeping.mpf = mpfOf(b, list)?.segment;
+    return join([
+      ...parts(b, list, orientation, source, keeping),
+      ...maps.bytes,
+    ]);
+  }
+  const primary = mpfOf(b, list)?.primary ?? 0;
+  const all = (length: number, tiff: number): MpImage[] => {
+    let at = length;
+    return [
+      { attribute: primary, offset: 0, length },
+      ...maps.images.map((image) => {
+        const placed = { ...image, offset: at - tiff };
+        at += image.length;
+        return placed;
+      }),
+    ];
+  };
+  const placeholder = segment(APP2, mpfPayload(all(0, 0)));
+  const kept = parts(b, list, orientation, source, keeping, placeholder);
+  const index = kept.indexOf(placeholder);
+  const before = kept.slice(0, index).reduce((n, p) => n + p.length, 0);
+  const length = kept.reduce((n, p) => n + p.length, 0);
+  // Offsets count from the MPF's TIFF header: after the marker, the
+  // length and "MPF\0".
+  kept[index] = segment(APP2, mpfPayload(all(length, before + 8)));
+  return join([...kept, ...maps.bytes]);
+}
+
+/** Only what options.ts says about keeping as it is. */
+const asIsOf = (opts: CleanOptions) => ({
+  ...(opts.drawnAsIs ? { drawnAsIs: true } : {}),
+  ...(opts.keepRead ? { keepRead: true } : {}),
+});
+
+/** What a clean copy of this JPEG keeps besides the picture. */
+function keepingFor(
+  b: Uint8Array,
+  list: Segment[],
+  opts: CleanOptions,
+): Keeping {
+  const source = sourceType(opts);
+  const asIs = opts.drawnAsIs === true || opts.keepRead === true;
+  return {
+    asIs,
+    read: opts.keepRead === true,
+    technical: asIs
+      ? list.find(
+          (s) =>
+            !s.late &&
+            isExif(b, s) &&
+            technicalOnly(b.subarray(s.body + EXIF.length, s.end)),
+        )
+      : undefined,
+    labels: opts.keepLabels ? labelSegments(b, list) : new Set(),
+    source:
+      source === undefined
+        ? undefined
+        : list.find(
+            (s) =>
+              !s.late &&
+              s.marker === APP1 &&
+              startsWith(b, s.body, XMP) &&
+              sourceOnly(b.subarray(s.body + XMP.length, s.end)) === source,
+          ),
+  };
 }
 
 /** A JPEG cleaned without moving a byte, for one stored inside another

@@ -1,13 +1,17 @@
 // The built command (dist/tellall.js) run as users run it, in a Node
 // process of its own, on the fixtures and on copies in a temp folder.
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
+  truncateSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +23,8 @@ const CLI_DIR = fileURLToPath(new URL("..", import.meta.url));
 const ROOT = join(CLI_DIR, "../..");
 const BIN = join(CLI_DIR, "dist/tellall.js");
 const CHATGPT = join(ROOT, "fixtures/ai/chatgpt-image.png");
+const GPS = join(ROOT, "fixtures/photo/gps.jpg");
+const DAMAGED = join(ROOT, "fixtures/photo/damaged.jpg");
 const NOTICE =
   "AI labels removed. The invisible watermark in the pixels (if any) stays; this tool can't remove it.";
 
@@ -33,7 +39,10 @@ afterAll(() => {
   if (tmp) rmSync(tmp, { recursive: true, force: true });
 });
 
-function tellall(args: string[], opts: { input?: string; cwd?: string } = {}) {
+function tellall(
+  args: string[],
+  opts: { input?: string | Buffer; cwd?: string } = {},
+) {
   const r = spawnSync(process.execPath, [BIN, ...args], {
     cwd: opts.cwd ?? ROOT,
     input: opts.input ?? "",
@@ -186,5 +195,216 @@ describe("tellall clean", () => {
 
   test("stdin can't be cleaned", () => {
     expect(tellall(["clean", "-"]).code).toBe(2);
+  });
+});
+
+/** The temp files a write left in a folder: none, if all went well. */
+const leftovers = (dir: string) =>
+  readdirSync(dir).filter((n) => n.endsWith(".tmp"));
+
+describe("clean: which files are inputs", () => {
+  test("a name.clean.ext is a copy only with name.ext beside it", () => {
+    const dir = folder("own", {
+      "holiday.clean.jpg": GPS,
+      "b.jpg": GPS,
+      "b.clean.jpg": GPS,
+    });
+    const r = tellall(["clean", "--force", dir]);
+    expect(r.code).toBe(0);
+    // The user's own holiday.clean.jpg is cleaned like any other file.
+    expect(statSync(join(dir, "holiday.clean.clean.jpg")).isFile()).toBe(true);
+    // b.clean.jpg is tellall's: replaced, not cleaned again.
+    expect(readFileSync(join(dir, "b.clean.jpg"))).not.toEqual(
+      readFileSync(GPS),
+    );
+    expect(() => statSync(join(dir, "b.clean.clean.jpg"))).toThrow();
+    expect(r.err).toBe("tellall: Skipped 1 clean copy tellall made earlier.\n");
+  });
+
+  test("several folders keep their names under -o; a file named twice is cleaned once", () => {
+    folder("col/d1", { "gps.jpg": GPS });
+    folder("col/d2", { "gps.jpg": GPS });
+    const out = join(tmp, "col-out");
+    const r = tellall([
+      "clean",
+      "-o",
+      out,
+      join(tmp, "col/d1"),
+      join(tmp, "col/d2"),
+      join(tmp, "col/d1/gps.jpg"),
+    ]);
+    expect(r.err).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.out.split("Wrote ")).toHaveLength(3);
+    expect(statSync(join(out, "d1/gps.clean.jpg")).isFile()).toBe(true);
+    expect(statSync(join(out, "d2/gps.clean.jpg")).isFile()).toBe(true);
+  });
+});
+
+describe("clean: writing copies", () => {
+  test("--force replaces the copy, not a file linked to it", () => {
+    const dir = folder("links", { "gps.jpg": GPS, "keep.jpg": CHATGPT });
+    linkSync(join(dir, "keep.jpg"), join(dir, "gps.clean.jpg"));
+    const r = tellall(["clean", "--force", join(dir, "gps.jpg")]);
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(dir, "keep.jpg"))).toEqual(readFileSync(CHATGPT));
+    expect(readFileSync(join(dir, "gps.clean.jpg"))).not.toEqual(
+      readFileSync(CHATGPT),
+    );
+    expect(leftovers(dir)).toEqual([]);
+  });
+
+  test("a copy already there is an error on stderr, and nothing is left behind", () => {
+    const dir = folder("again", { "gps.jpg": GPS });
+    expect(tellall(["clean", join(dir, "gps.jpg")]).code).toBe(0);
+    const before = readFileSync(join(dir, "gps.clean.jpg"));
+    const r = tellall(["clean", join(dir, "gps.jpg")]);
+    expect(r.code).toBe(2);
+    expect(r.out).toBe("");
+    expect(r.err).toMatch(/gps\.clean\.jpg is already there\. Add --force/);
+    expect(readFileSync(join(dir, "gps.clean.jpg"))).toEqual(before);
+    expect(leftovers(dir)).toEqual([]);
+  });
+
+  test("-o naming a file says so", () => {
+    const dir = folder("ofile", { "gps.jpg": GPS, afile: CHATGPT });
+    const r = tellall([
+      "clean",
+      "--force",
+      "-o",
+      join(dir, "afile"),
+      join(dir, "gps.jpg"),
+    ]);
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/afile is a file, not a folder\.\n$/);
+    expect(r.err).not.toContain("--force");
+  });
+
+  test("a damaged file: inspect exits 0, clean exits 2 and says why on stderr", () => {
+    expect(tellall([DAMAGED]).code).toBe(0);
+    const dir = folder("damaged", { "damaged.jpg": DAMAGED });
+    const r = tellall(["clean", join(dir, "damaged.jpg")]);
+    expect(r.code).toBe(2);
+    expect(r.out).toBe("");
+    expect(r.err).toContain("damaged, so tellall can't make a clean copy");
+  });
+});
+
+describe("folders", () => {
+  test("links inside a folder are skipped and counted; a link named by itself is read", () => {
+    const dir = folder("loop/sub", { "gps.jpg": GPS });
+    const loop = join(tmp, "loop");
+    // A junction on Windows, a folder link elsewhere: back up to loop/.
+    symlinkSync(loop, join(dir, "back"), "junction");
+    const r = tellall([loop]);
+    expect(r.code).toBe(0);
+    expect(r.out.match(/gps\.jpg\n/g)).toHaveLength(1);
+    expect(r.err).toContain("Skipped 1 link inside folders");
+    const named = tellall([join(dir, "back")]);
+    expect(named.code).toBe(0);
+    expect(named.out).toMatch(/back\/sub\/gps\.jpg\n/);
+  });
+
+  test("dot-folders and node_modules are skipped and counted", () => {
+    folder("pub/.assets", { "gps.jpg": GPS });
+    folder("pub/node_modules/x", { "gps.jpg": GPS });
+    folder("pub/ok", { "b.png": CHATGPT });
+    const r = tellall(["--fail-on", "private", join(tmp, "pub")]);
+    expect(r.code).toBe(0);
+    expect(r.err).toBe(
+      "tellall: Skipped 2 folders named node_modules or starting with a dot.\n",
+    );
+  });
+});
+
+describe("reading", () => {
+  test("a file of another kind is listed without being read, whatever its size", () => {
+    const dir = folder("video", {});
+    const file = join(dir, "long.mp4");
+    const head = Buffer.alloc(32);
+    head.writeUInt32BE(32, 0);
+    head.write("ftypisomisomiso2mp41", 4);
+    writeFileSync(file, head);
+    // Over 2 GiB, more than Node reads into one buffer: reading it all
+    // would fail.
+    truncateSync(file, 2 ** 31 + 2 ** 20);
+    try {
+      const r = tellall(["--fail-on", "any", file]);
+      expect(r.err).toBe("");
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("tellall can't read this kind of file yet.");
+      expect(tellall(["clean", file]).code).toBe(0);
+    } finally {
+      rmSync(file);
+    }
+  });
+
+  test("stops quietly when the reader of its output goes away", async () => {
+    const child = spawn(
+      process.execPath,
+      [BIN, join(ROOT, "fixtures/photo"), join(ROOT, "fixtures/ai")],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    child.stdout.destroy();
+    let err = "";
+    child.stderr.on("data", (d) => (err += d));
+    const code = await new Promise((done) => child.on("close", done));
+    expect(err).toBe("");
+    expect(code).toBe(0);
+  });
+
+  test.runIf(process.platform === "win32")(
+    "error messages show paths with one kind of slash",
+    () => {
+      const r = tellall([join(tmp, "nothing-here.png")]);
+      expect(r.err).toMatch(
+        /^tellall: can't read [^\\]+: no such file or folder\n$/,
+      );
+    },
+  );
+});
+
+describe("stdin", () => {
+  test("a byte-order mark is kept for the scan", () => {
+    const r = tellall(["--json", "-"], {
+      input: Buffer.from("﻿hello\n"),
+    });
+    expect(r.out).toContain("U+FEFF");
+  });
+
+  test("UTF-16 is read by its byte-order mark", () => {
+    const r = tellall(["-"], {
+      input: Buffer.from("﻿a​b\n", "utf16le"),
+    });
+    expect(r.out).toContain("This text has 1 hidden character.");
+    expect(r.out).toContain("U+200B");
+  });
+
+  test("bytes that aren't UTF-8 are said, not silently replaced", () => {
+    const r = tellall(["-"], { input: Buffer.from("caf\xe9\n", "latin1") });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("isn't valid UTF-8");
+  });
+});
+
+describe("arguments", () => {
+  test("-o doesn't take the next option as its folder; -o=dir works", () => {
+    const dir = folder("oflag", { "gps.jpg": GPS });
+    const r = tellall(["clean", join(dir, "gps.jpg"), "-o", "--force"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("-o needs a value; --force looks like an option.");
+    const ok = tellall(["clean", join(dir, "gps.jpg"), `-o=${join(dir, "o")}`]);
+    expect(ok.code).toBe(0);
+    expect(statSync(join(dir, "o/gps.clean.jpg")).isFile()).toBe(true);
+  });
+
+  test("--help lists -h, -v and the exit codes", () => {
+    const r = tellall(["--help"]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("tellall -h, --help");
+    expect(r.out).toContain("tellall -v, --version");
+    expect(r.out).toContain(
+      "Exit codes: 0 done; 1 --fail-on matched; 2 usage, read or write error",
+    );
   });
 });

@@ -1,17 +1,9 @@
 {
   "name": "damaged.jpg",
   "format": "jpeg",
-  "headline": "No marks found. That doesn't prove anything: many apps and sites strip them.",
-  "findings": [
-    {
-      "group": "other-text",
-      "kind": "info",
-      "sentence": "This file is damaged; tellall read what it could.",
-      "fields": [],
-      "cleanedBy": "nothing"
-    }
-  ],
-  "empty": true,
+  "headline": "This file is damaged; tellall read what it could.",
+  "findings": [],
+  "empty": false,
   "anatomy": [
     {
       "part": "header",

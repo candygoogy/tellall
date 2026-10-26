@@ -4,7 +4,7 @@
 // the CLI prints it.
 import examples from "virtual:examples";
 import { $, $$, copyText, esc, tabs } from "../dom.ts";
-import { G, ScrollTrigger, TICK, TYPE, fadeIn, motion } from "../motion.ts";
+import { FADE, G, ScrollTrigger, fadeIn, motion } from "../motion.ts";
 
 const CLI_CMD = `npx tellall ${examples.files.chatgpt.name}`;
 const AGENT_CMD = "/plugin install tellall --marketplace candygoogy/tellall";
@@ -32,7 +32,7 @@ function agentLines(): Line[] {
   const j = (k: string, v: string) =>
     `    <span class="t-key">"${k}"</span>: <span class="t-str">${esc(JSON.stringify(v))}</span>,`;
   return [
-    { cls: "t-dim", text: `tellall skill: npx -y tellall --json ${r.name}` },
+    { cls: "t-dim", text: `tellall skill: npx -y tellall --json -- ${r.name}` },
     { cls: "", text: "[" },
     { cls: "", text: "  {" },
     { cls: "", html: j("name", r.name) },
@@ -88,23 +88,19 @@ function render(animate: boolean): void {
   G.set(out, { opacity: 0 });
   const tl = G.timeline();
   termTL = tl;
-  const o = { n: 0 };
-  // Typed one character per tick, then the output prints line by line, as
-  // a terminal does.
-  tl.to(
-    o,
-    {
-      n: cmd.length,
-      duration: cmd.length * TYPE,
-      ease: `steps(${cmd.length})`,
-      onUpdate: () => {
-        cmdEl.textContent = cmd.slice(0, Math.round(o.n));
-      },
-    },
-    0.25,
-  )
-    .add(() => caret.remove(), "+=0.3")
-    .to(out, { opacity: 1, duration: 0.01, stagger: TICK }, ">");
+  // Typed at a person's uneven pace (a fixed pattern, so every visit looks
+  // the same), a beat after each space; then Enter, and the output prints
+  // line by line, as a terminal does.
+  let at = 0.25;
+  for (let i = 1; i <= cmd.length; i++) {
+    at += 0.028 + ((i * 37) % 23) / 1000 + (cmd[i - 2] === " " ? 0.06 : 0);
+    tl.call(() => (cmdEl.textContent = cmd.slice(0, i)), undefined, at);
+  }
+  tl.add(() => caret.remove(), at + 0.35).to(
+    out,
+    { opacity: 1, ...FADE, stagger: 0.055 },
+    ">",
+  );
 }
 
 export function initTerm(): void {
@@ -124,6 +120,13 @@ export function initTerm(): void {
 }
 
 export function termScenes(): void {
+  // Start blank, so the terminal doesn't show its finished output and then
+  // wipe it when the typing starts.
+  if (motion()) {
+    const body = $("#term-body");
+    $(".t-cmd", body).textContent = "";
+    G.set($$(".t-line", body), { opacity: 0 });
+  }
   ScrollTrigger.create({
     trigger: "#term",
     start: "top 75%",

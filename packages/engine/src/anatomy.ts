@@ -54,22 +54,40 @@ class Canvas {
     this.spans = out;
   }
 
-  paint(from: number, to: number, part: Part, note: string) {
+  /** Paints one part over these ranges (in any order, overlapping or
+   * not), in one pass over the parts already there. */
+  paint(ranges: [from: number, to: number][], part: Part, note: string) {
     this.finish();
-    from = Math.max(0, from);
-    to = Math.min(this.length, to);
-    if (to <= from) return;
-    const out: Span[] = [];
-    for (const s of this.spans) {
-      const [a, b] = s;
-      if (b <= from || a >= to) {
-        out.push(s);
-        continue;
-      }
-      if (a < from) out.push([a, from, s[2], s[3]]);
-      if (b > to) out.push([to, b, s[2], s[3]]);
+    const merged: [number, number][] = [];
+    const sorted = ranges
+      .map(([from, to]): [number, number] => [
+        Math.max(0, from),
+        Math.min(this.length, to),
+      ])
+      .filter(([from, to]) => to > from)
+      .sort((x, y) => x[0] - y[0]);
+    for (const [from, to] of sorted) {
+      const last = merged.at(-1);
+      if (last && from <= last[1]) last[1] = Math.max(last[1], to);
+      else merged.push([from, to]);
     }
-    out.push([from, to, part, note]);
+    if (!merged.length) return;
+    const out: Span[] = [];
+    let next = 0;
+    for (const [a, b, p, n] of this.spans) {
+      let at = a;
+      while (at < b) {
+        while ((merged[next]?.[1] ?? Infinity) <= at) next++;
+        const range = merged[next];
+        if (!range || range[0] >= b) {
+          out.push([at, b, p, n]);
+          break;
+        }
+        if (range[0] > at) out.push([at, range[0], p, n]);
+        at = Math.min(range[1], b);
+      }
+    }
+    for (const [from, to] of merged) out.push([from, to, part, note]);
     this.spans = out.sort((x, y) => x[0] - y[0]);
   }
 
@@ -295,14 +313,15 @@ function heic(b: Uint8Array, c: Canvas) {
   // The photo's Exif and XMP items, wherever their bytes sit.
   try {
     const { exif, xmp } = heifLayout(b);
-    for (const item of exif) {
-      for (const x of item.extents)
-        c.paint(x.offset, x.offset + x.length, "metadata", words.exif);
-    }
-    for (const item of xmp) {
-      for (const x of item.extents)
-        c.paint(x.offset, x.offset + x.length, "metadata", words.xmp);
-    }
+    const ranges = (items: typeof exif) =>
+      items.flatMap((item) =>
+        item.extents.map((x): [number, number] => [
+          x.offset,
+          x.offset + x.length,
+        ]),
+      );
+    c.paint(ranges(exif), "metadata", words.exif);
+    c.paint(ranges(xmp), "metadata", words.xmp);
   } catch {
     // The items can't be followed: the boxes alone are drawn.
   }
@@ -326,7 +345,7 @@ export function anatomy(
   }
   if (label?.range) {
     const { offset, length } = label.range;
-    c.paint(offset, offset + length, "label", words.label(label.signer));
+    c.paint([[offset, offset + length]], "label", words.label(label.signer));
   }
   return c.pieces();
 }

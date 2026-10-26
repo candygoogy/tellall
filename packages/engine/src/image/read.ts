@@ -10,7 +10,8 @@ import { ascii, startsWith } from "../bytes.ts";
 import type { ImageType } from "./detect.ts";
 import { readJobs, type Answer, type Job, type Meta } from "./exif.ts";
 import { exifTiff, heifMeta, itemBytes } from "./heif.ts";
-import { join, segments } from "./strip/jpeg.ts";
+import { mpfOf } from "./mpf.ts";
+import { join, segments, type Segment } from "./strip/jpeg.ts";
 import { chunks as pngChunks } from "./strip/png.ts";
 
 export type { Meta };
@@ -69,6 +70,12 @@ interface Blocks {
 
 const empty = (): Blocks => ({ tiff: [], xmp: [], irb: [], text: [] });
 
+/** The most blocks of each kind read from one file, so a file made of
+ * tens of thousands of comments or text chunks reads as fast as any:
+ * what's past these is still removed by a clean copy. */
+const MOST_BLOCKS = 2000;
+const room = (list: unknown[]) => list.length < MOST_BLOCKS;
+
 /** Bytes as Latin-1 text. */
 const latin1 = (b: Uint8Array) => ascii(b);
 const utf8 = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -77,36 +84,64 @@ const XMP = "http://ns.adobe.com/xap/1.0/\0";
 const XMP_EXTENSION = "http://ns.adobe.com/xmp/extension/\0";
 const PHOTOSHOP = "Photoshop 3.0\0";
 
+/** The most extra pictures read after a JPEG's end. */
+const MOST_PICTURES = 8;
+
 /** A JPEG's blocks, wherever they sit: before the picture, between its
- * scans, or after them. */
+ * scans, or after them; and those of the pictures stored after its end
+ * (the ones its MPF lists, and one right after its end marker), which a
+ * clean copy removes or cleans too. */
 function jpegBlocks(b: Uint8Array): Blocks {
   const out = empty();
+  const { list, end } = segments(b);
+  pictureBlocks(b, list, out);
+  const after = new Set(
+    (mpfOf(b, list)?.extra ?? []).map((image) => image.offset),
+  );
+  if (b[end] === 0xff && b[end + 1] === 0xd8) after.add(end);
+  for (const offset of [...after].slice(0, MOST_PICTURES)) {
+    try {
+      const picture = b.subarray(offset);
+      pictureBlocks(picture, segments(picture).list, out);
+    } catch {
+      // Not a picture that can be followed: a clean copy drops it.
+    }
+  }
+  return out;
+}
+
+/** One JPEG picture's blocks, added to `out`. */
+function pictureBlocks(b: Uint8Array, list: Segment[], out: Blocks) {
   // Extended XMP comes in parts, put back together by id and offset.
   const extended = new Map<string, [number, Uint8Array][]>();
-  for (const { marker, body, end } of segments(b).list) {
+  for (const { marker, body, end } of list) {
     if (marker === 0xe1 && startsWith(b, body, EXIF)) {
-      out.tiff.push(b.subarray(body + EXIF.length, end));
+      if (room(out.tiff)) out.tiff.push(b.subarray(body + EXIF.length, end));
     } else if (marker === 0xe1 && startsWith(b, body, XMP)) {
-      out.xmp.push(b.subarray(body + XMP.length, end));
+      if (room(out.xmp)) out.xmp.push(b.subarray(body + XMP.length, end));
     } else if (marker === 0xe1 && startsWith(b, body, XMP_EXTENSION)) {
       const at = body + XMP_EXTENSION.length;
       if (at + 40 > end) continue;
       const id = latin1(b.subarray(at, at + 32));
       const offset = new DataView(b.buffer, b.byteOffset).getUint32(at + 36);
-      extended.set(id, [
-        ...(extended.get(id) ?? []),
-        [offset, b.subarray(at + 40, end)],
-      ]);
+      let parts = extended.get(id);
+      if (!parts) {
+        if (extended.size >= MOST_BLOCKS) continue;
+        parts = [];
+        extended.set(id, parts);
+      }
+      parts.push([offset, b.subarray(at + 40, end)]);
     } else if (marker === 0xed && startsWith(b, body, PHOTOSHOP)) {
-      out.irb.push(b.subarray(body + PHOTOSHOP.length, end));
+      if (room(out.irb)) out.irb.push(b.subarray(body + PHOTOSHOP.length, end));
     } else if (marker === 0xfe) {
-      out.text.push(["Comment", utf8(b.subarray(body, end))]);
+      if (room(out.text))
+        out.text.push(["Comment", utf8(b.subarray(body, end))]);
     }
   }
   for (const parts of extended.values()) {
+    if (!room(out.xmp)) break;
     out.xmp.push(join(parts.sort((x, y) => x[0] - y[0]).map(([, p]) => p)));
   }
-  return out;
 }
 
 /** The most one compressed text chunk may inflate to. */
@@ -215,10 +250,12 @@ export async function pngBlocks(
   for (const c of pngChunks(b).list) {
     const data = b.subarray(c.data, c.end - 4);
     if (c.type === "eXIf" || c.type === "exIf") {
+      if (!room(out.tiff)) continue;
       out.tiff.push(startsWith(data, 0, EXIF) ? data.subarray(6) : data);
       continue;
     }
     if (c.type !== "tEXt" && c.type !== "zTXt" && c.type !== "iTXt") continue;
+    if (!room(out.text) || !room(out.xmp)) continue;
     const found = await pngText(c.type, data, allowance);
     if (found === UNREADABLE) out.unreadable = true;
     if (!found || found === UNREADABLE) continue;
@@ -262,9 +299,10 @@ function webpBlocks(b: Uint8Array): Blocks {
       if (type === "EXIF") {
         // Some writers keep JPEG's "Exif\0\0" prefix in the chunk.
         if (startsWith(body, 0, EXIF)) body = body.subarray(6);
-        out.tiff.push(body);
-      } else if (type === "XMP ") out.xmp.push(body);
-      else if (type === "ANMF") walk(i + 8 + 16, i + 8 + body.length);
+        if (room(out.tiff)) out.tiff.push(body);
+      } else if (type === "XMP ") {
+        if (room(out.xmp)) out.xmp.push(body);
+      } else if (type === "ANMF") walk(i + 8 + 16, i + 8 + body.length);
       i += 8 + size + (size % 2);
     }
   };
@@ -276,11 +314,13 @@ function webpBlocks(b: Uint8Array): Blocks {
 function heicBlocks(b: Uint8Array): Blocks {
   const { exif, xmp } = heifMeta(b);
   const out = empty();
-  for (const item of exif) {
+  for (const item of exif.slice(0, MOST_BLOCKS)) {
     const tiff = exifTiff(itemBytes(b, item));
-    if (tiff) out.tiff.push(tiff);
+    // One blanked by a clean copy that couldn't hold an empty TIFF is
+    // only zeros.
+    if (tiff?.some((c) => c !== 0)) out.tiff.push(tiff);
   }
-  for (const item of xmp) {
+  for (const item of xmp.slice(0, MOST_BLOCKS)) {
     const packet = itemBytes(b, item);
     // A packet blanked by a clean copy holds only spaces.
     if (packet.some((c) => c > 0x20)) out.xmp.push(packet);
@@ -317,6 +357,28 @@ function textFields(meta: Meta) {
 
 const isObject = (v: unknown): v is Meta =>
   typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** Every region's name: Name (MWG, IPTC) or PersonDisplayName
+ * (Microsoft), however deep the regions are listed. */
+function regionNames(values: unknown[]): string[] {
+  const out: string[] = [];
+  const walk = (v: unknown, depth: number) => {
+    if (depth > 8 || out.length >= MOST_BLOCKS) return;
+    if (Array.isArray(v)) for (const x of v) walk(x, depth + 1);
+    else if (isObject(v)) {
+      for (const [key, x] of Object.entries(v)) {
+        if (
+          (key === "Name" || key === "PersonDisplayName") &&
+          typeof x === "string"
+        ) {
+          if (x.trim()) out.push(x.trim());
+        } else walk(x, depth + 1);
+      }
+    }
+  };
+  for (const v of values) walk(v, 0);
+  return [...new Set(out)];
+}
 
 /** Each block read on its own, kept by where it came from, and put
  * together for the summary: the first value of a name wins. */
@@ -382,11 +444,22 @@ async function readBlocks(
   }
   // Text can repeat a name (a JPEG's comments): each value is kept.
   const plain = groups.get("text") ?? {};
+  const values = new Map<string, string[]>();
   for (const [name, value] of text) {
     if (!value.trim()) continue;
-    const before = plain[name];
-    plain[name] =
-      before === undefined ? value.trim() : [before, value.trim()].flat();
+    const list = values.get(name);
+    if (list) list.push(value.trim());
+    else values.set(name, [value.trim()]);
+  }
+  for (const [name, list] of values) {
+    plain[name] = list.length === 1 ? list[0] : list;
+  }
+  // The names in face regions (Metadata Working Group's, Microsoft's,
+  // IPTC's), on their own: the rest of a region is its shape.
+  const xmpFields = groups.get("xmp") ?? {};
+  const names = regionNames([xmpFields["Regions"], xmpFields["ImageRegion"]]);
+  if (names.length && !("RegionName" in xmpFields)) {
+    xmpFields["RegionName"] = names.length === 1 ? names[0] : names;
   }
 
   const meta: Meta = {};

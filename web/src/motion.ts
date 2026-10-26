@@ -25,8 +25,6 @@ export const EASE = "expo.out";
 export const TICK = 0.085;
 export const STEP = (dur: number) =>
   `steps(${Math.max(2, Math.round(dur / TICK))})`;
-/** Typing: one character every 45 ms. */
-export const TYPE = 0.045;
 /** Arrivals: a plain 120 ms linear fade, no steps, no travel. */
 export const FADE = { duration: 0.12, ease: "none" } as const;
 

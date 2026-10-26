@@ -10,9 +10,10 @@
 // Node, Vitest and the worker all get it from importing this file.
 import "reflect-metadata";
 import { createAsset, type Asset } from "@trustnxt/c2pa-ts/asset";
-import { CBORBox, SuperBox } from "@trustnxt/c2pa-ts/jumbf";
+import { CBORBox, JSONBox, SuperBox } from "@trustnxt/c2pa-ts/jumbf";
 import {
   ActionAssertion,
+  AssertionLabels,
   IngredientAssertion,
   Manifest,
   ManifestStore,
@@ -56,6 +57,10 @@ export interface Label {
   detailsUnavailable: boolean;
   /** For "Show everything". */
   fields: Field[];
+  /** What the label's metadata assertions (stds.exif, c2pa.metadata, a
+   * CreativeWork) say, each value by its name without a prefix, the first
+   * of a name winning. A clean copy that keeps the label keeps these. */
+  metadata: Record<string, unknown>;
   /** Where the label sits, for the anatomy map. */
   range: Range | null;
 }
@@ -110,6 +115,7 @@ export async function readLabel(
       if (value) fields.push({ name, value, from });
   }
   const ingredients = attempt(() => ingredientsOf(active, fields), 0);
+  const metadata = attempt(() => metadataOf(store), {});
 
   return {
     signer,
@@ -125,6 +131,7 @@ export async function readLabel(
     ingredients,
     detailsUnavailable: false,
     fields,
+    metadata,
     range,
   };
 }
@@ -143,6 +150,7 @@ function unreadable(range: Range): Label {
     fields: [
       { name: "Size", value: `${range.length} bytes`, from: "C2PA label" },
     ],
+    metadata: {},
     range,
   };
 }
@@ -247,6 +255,53 @@ function ingredientsOf(manifest: Manifest, fields: Field[]): number {
       if (value) fields.push({ name, value, from });
   }
   return count;
+}
+
+/** Assertions that hold a photo's metadata as JSON-LD (or CBOR). */
+const METADATA_LABELS: ReadonlySet<string> = new Set([
+  ...AssertionLabels.metadataAssertions,
+  AssertionLabels.creativeWork,
+]);
+/** The most values read from them, all together. */
+const MOST_VALUES = 1000;
+
+/** A JSON-LD value without its own keywords (@type, @id, @context), each
+ * name without its prefix. */
+function plain(value: unknown, depth = 0): unknown {
+  if (depth > 16) return undefined;
+  if (Array.isArray(value)) {
+    return value.slice(0, MOST_VALUES).map((v) => plain(v, depth + 1));
+  }
+  if (typeof value !== "object" || value === null) return value;
+  if (ArrayBuffer.isView(value) || value instanceof Date) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(value).slice(0, MOST_VALUES)) {
+    if (key === "@value" || key === "@list") return plain(v, depth + 1);
+    if (key.startsWith("@")) continue;
+    out[key.split(":").at(-1) ?? key] = plain(v, depth + 1);
+  }
+  return out;
+}
+
+/** Every metadata assertion's values, in every manifest of the store. */
+function metadataOf(store: ManifestStore): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  let count = 0;
+  for (const manifest of store.manifests) {
+    for (const assertion of manifest.assertions?.assertions ?? []) {
+      if (!assertion.label || !METADATA_LABELS.has(assertion.label)) continue;
+      const box = assertion.sourceBox?.contentBoxes.find(
+        (b) => b instanceof JSONBox || b instanceof CBORBox,
+      ) as JSONBox | CBORBox | undefined;
+      const content = plain(box?.content);
+      if (typeof content !== "object" || content === null) continue;
+      for (const [key, value] of Object.entries(content)) {
+        if (++count > MOST_VALUES) return out;
+        if (!(key in out) && value !== undefined) out[key] = value;
+      }
+    }
+  }
+  return out;
 }
 
 interface Step {

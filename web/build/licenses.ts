@@ -2,9 +2,9 @@
 // in the page and in its engine worker. Every package from node_modules
 // the build put into any chunk (the lazy ones and the worker's too), and
 // the build's own helpers it copies in, each with its licence text as the
-// package ships it, sorted by name. After Photo check's
-// experiments/shared/licenses.ts (thirdPartyNotices); the fonts' OFL texts
-// are served beside them in /fonts/.
+// package ships it, sorted by name (and version, when two are bundled).
+// After Photo check's experiments/shared/licenses.ts (thirdPartyNotices);
+// the fonts' OFL texts are served beside them in /fonts/.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,13 @@ const NODE_MODULES = fileURLToPath(
 );
 const MARK = "node_modules/";
 
+interface Package {
+  dir: string;
+  name: string;
+  version?: string;
+  license?: string;
+}
+
 /** The package a bundled module came from, as its folder and name. */
 function packageOf(id: string): { dir: string; name: string } | null {
   const path = id.replace(/\\/g, "/");
@@ -22,7 +29,7 @@ function packageOf(id: string): { dir: string; name: string } | null {
   if (path.startsWith("\0")) {
     const name = /^\0(@[^/]+\/[^/]+|[^/]+)\//.exec(path)?.[1];
     if (!name) return null;
-    const dir = join(NODE_MODULES, name);
+    const dir = join(NODE_MODULES, name).replace(/\\/g, "/");
     return existsSync(join(dir, "package.json")) ? { dir, name } : null;
   }
   const at = path.lastIndexOf(MARK);
@@ -48,33 +55,47 @@ function licenceText(dir: string): string {
 }
 
 export function thirdPartyNotices(moduleIds: Iterable<string>): string {
-  const packages = new Map<string, string>();
+  // Keyed by the package's folder, not its name: a package can be bundled
+  // in two versions (a nested node_modules/tslib beside the top-level one),
+  // and each version's notice goes in.
+  const packages = new Map<string, Package>();
   for (const id of moduleIds) {
     const found = packageOf(id);
-    if (found) packages.set(found.name, found.dir);
+    if (found && !packages.has(found.dir)) {
+      const pkg = JSON.parse(
+        readFileSync(join(found.dir, "package.json"), "utf8"),
+      ) as { version?: string; license?: string };
+      packages.set(found.dir, {
+        ...found,
+        version: pkg.version,
+        license: pkg.license,
+      });
+    }
   }
   const head = [
     "Third-party code in tellall's page",
     "",
     "The page and its engine worker include code from the open-source packages below, each under its own licence.",
-    "The fonts (Inter, Martian Grotesk, Martian Mono) are under the SIL Open Font License 1.1: /fonts/*-OFL.txt.",
+    "The fonts (Inter, Martian Grotesk, Martian Mono) are under the SIL Open Font License 1.1: /fonts/Inter-OFL.txt, /fonts/MartianGrotesk-OFL.txt and /fonts/MartianMono-OFL.txt.",
   ];
-  const entries = [...packages]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([name, dir]) => {
-      const pkg = JSON.parse(
-        readFileSync(join(dir, "package.json"), "utf8"),
-      ) as {
-        version?: string;
-        license?: string;
-      };
-      return [
+  const order = (a: Package, b: Package) =>
+    a.name < b.name
+      ? -1
+      : a.name > b.name
+        ? 1
+        : (a.version ?? "").localeCompare(b.version ?? "", "en", {
+            numeric: true,
+          });
+  const entries = [...packages.values()]
+    .sort(order)
+    .map((pkg) =>
+      [
         "-".repeat(72),
-        `${name} ${pkg.version ?? ""} (${pkg.license ?? "licence not stated"})`,
+        `${pkg.name} ${pkg.version ?? ""} (${pkg.license ?? "licence not stated"})`,
         "",
-        licenceText(dir),
-      ].join("\n");
-    });
+        licenceText(pkg.dir),
+      ].join("\n"),
+    );
   return `${[...head, ...entries.flatMap((e) => ["", e])].join("\n")}\n`;
 }
 

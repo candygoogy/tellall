@@ -21,14 +21,27 @@ export type Args =
     };
 
 export const USAGE = `Usage:
-  tellall <file|dir|-> ...            plain-sentence report; "-" reads text from stdin
-          --json                      machine-readable reports
-          --all                       also print raw fields
-          --fail-on private|label|any exit 1 if any input has that kind of finding
-  tellall clean <file|dir> ...        write clean copies, never touching originals
-          -o, --out <dir>             where to write (default: next to each file, name.clean.ext)
-          --remove-labels             also remove AI labels (C2PA, AI-source tags); files you own
-          --force                     overwrite existing .clean files
+  tellall [options] [--] <file|dir|-> ...
+    Plain-sentence report; "-" reads text from stdin.
+    --json                       machine-readable reports
+    --all                        also print raw fields
+    --fail-on private|label|any  exit 1 if any input has that kind of finding
+  tellall clean [options] [--] <file|dir> ...
+    Write clean copies, never touching originals.
+    -o, --out <dir>              where to write (default: next to each file, name.clean.ext)
+    --remove-labels              also remove AI labels (C2PA, AI-source tags); files you own
+    --force                      replace .clean copies already there
+  tellall -h, --help             this text
+  tellall -v, --version          the version number
+
+Put -- before the paths so a name starting with "-" isn't read as an option.
+Folders are read all the way down, except links, node_modules and folders
+whose names start with a dot; tellall says how many it skipped.
+
+Exit codes: 0 done; 1 --fail-on matched; 2 usage, read or write error, also
+when clean can't make a copy (a damaged file, or a copy already there without
+--force). A file of a kind tellall can't read is listed and doesn't change
+the exit code.
 `;
 
 export class UsageError extends Error {}
@@ -54,12 +67,23 @@ export function parseArgs(argv: string[]): Args {
   let out: string | null = null;
   let onlyPaths = false;
 
-  /** A flag's value: `--flag value` or `--flag=value`. */
+  /** A flag's value: `--flag value` or `--flag=value`. A next argument
+   * that starts with "-" is another flag, not the value. */
   const valueOf = (flag: string, inline: string | undefined) => {
-    const value = inline ?? rest.shift();
+    if (inline !== undefined) {
+      if (inline === "") throw new UsageError(`${flag} needs a value.`);
+      return inline;
+    }
+    const value = rest[0];
     if (value === undefined || value === "") {
       throw new UsageError(`${flag} needs a value.`);
     }
+    if (value.startsWith("-")) {
+      throw new UsageError(
+        `${flag} needs a value; ${value} looks like an option. For a value that starts with "-", write ${flag}=${value}.`,
+      );
+    }
+    rest.shift();
     return value;
   };
 
@@ -73,8 +97,9 @@ export function parseArgs(argv: string[]): Args {
       onlyPaths = true;
       continue;
     }
+    // `--out=dir`, and `-o=dir` too.
     const eq = arg.indexOf("=");
-    const flag = arg.startsWith("--") && eq > 0 ? arg.slice(0, eq) : arg;
+    const flag = eq > 1 ? arg.slice(0, eq) : arg;
     const inline = flag === arg ? undefined : arg.slice(eq + 1);
     if (flag === "-h" || flag === "--help") return { command: "help" };
     if (flag === "-v" || flag === "--version") return { command: "version" };

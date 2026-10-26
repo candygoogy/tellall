@@ -256,7 +256,10 @@ describe("damaged or truncated files", () => {
   test("damaged.jpg: no throw, says so; clean refuses with a sentence", async () => {
     const r = await inspect(file("photo/damaged.jpg"));
     expect(r.format).toBe("jpeg");
-    expect(sentences(r)).toContain(damaged);
+    // Nothing else found: the headline says it, and it isn't repeated below.
+    expect(r.headline).toBe(damaged);
+    expect(r.empty).toBe(false);
+    expect(sentences(r)).not.toContain(damaged);
     const out = await clean(file("photo/damaged.jpg"));
     expect(out.cleaned).toBe(false);
     expect(asBytes(out.output).length).toBe(0);

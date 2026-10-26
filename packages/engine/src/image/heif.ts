@@ -18,6 +18,7 @@
 // segmentation mattes) is left out, and so is a picture item nothing
 // leads to: metadata to a clean copy (strip/heic.ts).
 import { ascii, startsWith } from "../bytes.ts";
+import { en } from "../words/en.ts";
 import { gainMapPacket } from "./gain-map.ts";
 //
 // Every read stays inside its own box, and every count is checked against
@@ -40,6 +41,8 @@ export interface Item {
   /** Stored inside another item (iloc's construction method 2), which
    * this page doesn't follow. */
   inItem?: true;
+  /** Counted from idat's content (iloc's construction method 1). */
+  inIdat?: true;
 }
 
 /** A photo whose details are stored in a way this page can't clean. */
@@ -218,6 +221,7 @@ export function locate(
       if (!idat) throw new Error("The HEIC points into an idat it lacks.");
       for (const x of extents) x.offset += idat.body;
       limit = idat.end;
+      item.inIdat = true;
     }
     // A zero length means "to the end" (of the file, or of idat), with
     // one extent.
@@ -282,7 +286,9 @@ export function properties(r: Reader, iprp: Box): Map<number, Property[]> {
         const box = all[index - 1];
         if (box) list.push({ type: box.type, box });
       }
-      out.set(id, [...(out.get(id) ?? []), ...list]);
+      const before = out.get(id);
+      if (before) before.push(...list);
+      else out.set(id, list);
     }
   }
   return out;
@@ -319,6 +325,13 @@ export interface Reference {
   to: number[];
 }
 
+/** Adds ids to a list in a map, in place. */
+function add(map: Map<number, number[]>, key: number, ids: number[]) {
+  const list = map.get(key);
+  if (list) for (const id of ids) list.push(id);
+  else map.set(key, [...ids]);
+}
+
 /** Which items describe which pictures, which pictures are helpers, and
  * how pictures are linked: what each is made from (a grid's tiles), and
  * which are thumbnails or helpers of which. And every reference. */
@@ -344,14 +357,12 @@ function links(r: Reader, iref: Box | undefined) {
     for (let i = 0; i < count; i++) {
       to.push(r.uint(first + i * idSize, idSize, ref.end));
     }
-    if (ref.type === "cdsc")
-      describes.set(from, [...(describes.get(from) ?? []), ...to]);
+    if (ref.type === "cdsc") add(describes, from, to);
     if (ref.type === "auxl") helpers.add(from);
     if (ref.type === "auxl" || ref.type === "thmb") {
       belongs.push([from, to, ref.type]);
     }
-    if (ref.type === "dimg")
-      parts.set(from, [...(parts.get(from) ?? []), ...to]);
+    if (ref.type === "dimg") add(parts, from, to);
     references.push({ box: ref, from, to });
   }
   return { describes, helpers, parts, belongs, references };
@@ -512,6 +523,25 @@ export function heifLayout(b: Uint8Array): HeifLayout {
     primary = items.get(r.uint(pitm.body + 4, wide ? 4 : 2, pitm.end));
     if (primary && !PICTURES.has(primary.type)) primary = undefined;
   }
+  // Each picture's alternatives groups, and what belongs to it (its
+  // thumbnails and helpers), by its id: looked up once per picture.
+  const groupsOf = new Map<number, number[][]>();
+  for (const group of groups) {
+    for (const id of new Set(group)) {
+      const list = groupsOf.get(id);
+      if (list) list.push(group);
+      else groupsOf.set(id, [group]);
+    }
+  }
+  const belongsTo = new Map<number, [number, "thmb" | "auxl"][]>();
+  for (const [from, to, type] of belongs) {
+    for (const id of new Set(to)) {
+      const list = belongsTo.get(id);
+      if (list) list.push([from, type]);
+      else belongsTo.set(id, [[from, type]]);
+    }
+  }
+  const followed = new Set<number[]>();
   const keep = new Set<Item>();
   const todo: Item[] = [];
   const add = (id: number) => {
@@ -524,9 +554,13 @@ export function heifLayout(b: Uint8Array): HeifLayout {
   for (let item = todo.pop(); item; item = todo.pop()) {
     const id = item.id;
     for (const part of parts.get(id) ?? []) add(part);
-    for (const group of groups) if (group.includes(id)) group.forEach(add);
-    for (const [from, to, type] of belongs) {
-      if (to.includes(id) && (type === "thmb" || isKeptHelper(from))) add(from);
+    for (const group of groupsOf.get(id) ?? []) {
+      if (followed.has(group)) continue;
+      followed.add(group);
+      group.forEach(add);
+    }
+    for (const [from, type] of belongsTo.get(id) ?? []) {
+      if (type === "thmb" || isKeptHelper(from)) add(from);
     }
   }
 
@@ -556,9 +590,16 @@ export function heifLayout(b: Uint8Array): HeifLayout {
   const exif = all
     .filter((x) => x.type === "Exif")
     .sort((x, y) => Number(aboutThePhoto(y)) - Number(aboutThePhoto(x)));
-  const xmp = all.filter((x) => isXmp(x) && !helperXmp.includes(x));
+  const helperSet = new Set(helperXmp);
+  const xmp = all.filter((x) => isXmp(x) && !helperSet.has(x));
   if ([...exif, ...xmp].some((x) => x.inItem)) {
     throw new CantClean("This HEIC keeps its details inside another item.");
+  }
+  // Details are data: in mdat, or in idat. Anywhere else (inside the item
+  // list, say) they'd be the file's own boxes.
+  const data = top.filter((x) => x.type === "mdat");
+  if ([...exif, ...xmp].some((x) => !inData(x, data))) {
+    throw new CantClean(en.clean.heicDetailsInStructure);
   }
   if (overlaps(all, new Set([...exif, ...xmp]))) {
     throw new CantClean(
@@ -580,6 +621,17 @@ export function heifLayout(b: Uint8Array): HeifLayout {
     exif: exif.filter(located),
     xmp: xmp.filter(located),
   };
+}
+
+/** Whether an item's bytes are all data: inside idat (counted from it),
+ * or inside one of these mdat boxes' content. */
+export function inData(item: Item, mdats: Box[]): boolean {
+  if (item.inIdat) return true;
+  return item.extents.every(
+    (x) =>
+      x.length === 0 ||
+      mdats.some((m) => x.offset >= m.body && x.offset + x.length <= m.end),
+  );
 }
 
 /** The photo's own Exif and XMP items. */
