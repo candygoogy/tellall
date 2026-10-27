@@ -370,17 +370,21 @@ describe("files tellall can't read", () => {
     Buffer.from("%PDF-1.7\n%âãÏÓ\n1 0 obj\n<<>>\nendobj\n", "latin1"),
   );
 
-  for (const [name, b] of [
-    ["picture.avif", avif],
-    ["animation.gif", gif],
-    ["document.png", pdf],
+  for (const [name, b, headline] of [
+    ["picture.avif", avif, "tellall can't read this kind of file yet."],
+    ["animation.gif", gif, "tellall can't read this kind of file yet."],
+    [
+      "document.png",
+      pdf,
+      "This file is named like an image, but its bytes aren't a JPEG, PNG, WebP or HEIC that tellall can read.",
+    ],
   ] as const) {
     test(name, async () => {
       const r = await inspect({ kind: "file", name, bytes: b });
       expect(r).toEqual({
         name,
         format: "unknown",
-        headline: "tellall can't read this kind of file yet.",
+        headline,
         findings: [],
         empty: false,
         anatomy: [],

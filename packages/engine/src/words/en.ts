@@ -140,6 +140,9 @@ export const en = {
     empty:
       "No marks found. That doesn't prove anything: many apps and sites strip them.",
     unknown: "tellall can't read this kind of file yet.",
+    /** unknown, for a file whose name says JPEG, PNG, WebP or HEIC. */
+    notImage:
+      "This file is named like an image, but its bytes aren't a JPEG, PNG, WebP or HEIC that tellall can read.",
   },
 
   // The AI label (C2PA).

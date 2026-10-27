@@ -116,10 +116,13 @@ function brokenStructure(b: Uint8Array, type: ImageType): boolean {
   }
 }
 
+/** Names that say the file is one of the images tellall reads. */
+const IMAGE_NAME = /\.(jpe?g|png|webp|hei[cf])$/i;
+
 const unknown = (name: string): Report => ({
   name,
   format: "unknown",
-  headline: en.headline.unknown,
+  headline: IMAGE_NAME.test(name) ? en.headline.notImage : en.headline.unknown,
   findings: [],
   empty: false,
   anatomy: [],

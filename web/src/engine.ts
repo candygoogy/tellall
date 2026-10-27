@@ -21,7 +21,7 @@ export class GaveUp extends Error {}
 /** Part of the page's code couldn't load: offline, or replaced since the
  * page opened. */
 export const STALE =
-  "Part of tellall couldn't load: this page may have changed since you opened it, or the device is offline. Reload the page to read this; your other results stay until then.";
+  "Part of tellall couldn't load: this page may have changed since you opened it, or the device is offline. Once you're online, reload the page to read this; your other results stay until then.";
 
 /** The parts of a Worker the client uses. */
 export interface EngineWorker {

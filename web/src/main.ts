@@ -165,9 +165,13 @@ function start(): void {
     fitNames($("#r-view"));
     fitNames($("#cl"));
   });
-  // Start the engine while the visitor reads, so the first drop is quick.
-  (window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1200)))(() =>
-    warm(),
+  // Start the engine while the visitor reads, so the first drop is quick,
+  // and fetch the HEIC preview's code, so it's there with Wi-Fi off too.
+  (window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1200)))(
+    () => {
+      warm();
+      void import("./heic-preview.ts").catch(() => undefined);
+    },
   );
 }
 
