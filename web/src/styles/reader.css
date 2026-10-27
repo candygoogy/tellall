@@ -1,9 +1,10 @@
 /* ---------- product window ---------- */
 .stage { position: relative; margin: clamp(44px, 6vh, 64px) auto 0; padding: 0 var(--gutter); max-width: calc(1240px + var(--gutter) * 2); perspective: 1600px; perspective-origin: 50% 0%; }
 /* Flat composition on purpose: nested preserve-3d made the tilted window lose its own clicks
-   (the parent plane won hit-testing). The pointer tilt brings its own perspective instead. */
-.win-scroll { transform-origin: 50% 0%; transform: rotateX(6deg); -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent); }
-.win-tilt { transform-origin: 50% 40%; }
+   (the parent plane won hit-testing). */
+.win-scroll { transform-origin: 50% 0%; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 64px), transparent); }
+/* tilted only as the hero picture, before scripts run; flat under reduced motion and once in use (hero.ts) */
+@media (min-width: 760px) and (prefers-reduced-motion: no-preference) { .win-scroll:not(.is-flat) { transform: rotateX(20deg) scale(0.92); } }
 /* the one floating object on the page, so the one deep shadow */
 .win {
   position: relative; display: flex; flex-direction: column;

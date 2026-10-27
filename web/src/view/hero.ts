@@ -1,9 +1,9 @@
 // The hero: the dump of chatgpt-image.png's first bytes (written into
 // index.html at build time from the fixture), whose cursor glides the PNG
 // header to the byte where the C2PA label starts; and the tilted reader
-// window, which flattens as the page scrolls and leans toward the pointer.
+// window, which flattens as the page scrolls or the pointer rests on it.
 import { $, $$, maybe } from "../dom.ts";
-import { G, decode, fineMQ, motion, still } from "../motion.ts";
+import { G, decode, motion, still } from "../motion.ts";
 
 /** The cursor glides down the header a row at a time to the label's
  * first byte, each move a short ease from cell to cell; then the label's
@@ -89,68 +89,69 @@ export function walkDump(): void {
   tl.to({}, { duration: 0.25 });
 }
 
-/** The window flattens over the first 600 px of scroll; on a fine pointer
- * it leans toward the pointer and, at rest, eases flat and drops its
- * transform so its text renders crisp. */
+/** The window starts tilted, the hero's picture. Two things flatten it:
+ * scrolling (all the way over the first 600 px) and the pointer resting on
+ * it, which tilts it back when it leaves. A click or a tab into it keeps it
+ * flat for good. Flat, it drops its transform, so its text renders crisp. */
 export function initTilt(): void {
-  const stage = $("#stage");
-  const tilt = $(".win-tilt");
-  const reader = $("#reader");
+  const win = $(".win-scroll");
   G.matchMedia().add(
     { ok: "(min-width: 760px) and (prefers-reduced-motion: no-preference)" },
     (ctx) => {
-      if (!ctx.conditions?.["ok"] || still) return;
-      G.fromTo(
-        ".win-scroll",
-        { rotateX: 20, scale: 0.92 },
-        {
-          rotateX: 6,
-          scale: 1,
-          ease: "none",
-          scrollTrigger: { start: 0, end: 600, scrub: 0.6 },
-        },
-      );
-      if (!fineMQ.matches) return;
-      G.set(tilt, { transformPerspective: 2400 });
-      const rx = G.quickTo(tilt, "rotationX", {
-        duration: 0.8,
-        ease: "power3",
-      });
-      const ry = G.quickTo(tilt, "rotationY", {
-        duration: 0.8,
-        ease: "power3",
-      });
-      let flat = false;
-      let lastMove = 0;
-      let idleT = 0;
-      const settle = () => {
-        rx(0);
-        ry(0);
-        setTimeout(() => {
-          if (Date.now() - lastMove > 1300) {
-            G.set(tilt, { clearProps: "transform" });
-            flat = true;
-          }
-        }, 950);
-      };
-      const move = (e: PointerEvent) => {
-        if (flat) {
-          G.set(tilt, { transformPerspective: 2400 });
-          flat = false;
+      if (!ctx.conditions?.["ok"]) return;
+      if (still) {
+        win.classList.add("is-flat");
+        return;
+      }
+      // How tilted, from 1 (the hero picture) to 0 (flat): what scrolling
+      // has left of the tilt, times what the pointer leaves of it.
+      const t = { scroll: 1, hover: 1 };
+      let used = false;
+      const apply = () => {
+        const k = t.scroll * t.hover;
+        if (k < 0.001) {
+          G.set(win, { clearProps: "transform" });
+          win.classList.add("is-flat");
+          return;
         }
-        const r = reader.getBoundingClientRect();
-        rx(-((e.clientY - r.top) / r.height - 0.5) * 2.4);
-        ry(((e.clientX - r.left) / r.width - 0.5) * 3.2);
-        lastMove = Date.now();
-        clearTimeout(idleT);
-        idleT = window.setTimeout(settle, 1400);
+        win.classList.remove("is-flat");
+        G.set(win, { rotateX: 20 * k, scale: 1 - 0.08 * k });
       };
-      stage.addEventListener("pointermove", move);
-      stage.addEventListener("pointerleave", settle);
+      apply();
+      G.to(t, {
+        scroll: 0,
+        ease: "none",
+        onUpdate: apply,
+        scrollTrigger: { start: 0, end: 600, scrub: 0.6 },
+      });
+      const ease = (hover: number) =>
+        G.to(t, {
+          hover,
+          duration: 0.45,
+          ease: "power2.out",
+          overwrite: true,
+          onUpdate: apply,
+        });
+      const enter = (e: PointerEvent) => {
+        if (e.pointerType === "mouse") ease(0);
+      };
+      const leave = () => {
+        if (!used) ease(1);
+      };
+      const use = () => {
+        used = true;
+        ease(0);
+      };
+      win.addEventListener("pointerenter", enter);
+      win.addEventListener("pointerleave", leave);
+      win.addEventListener("pointerdown", use);
+      win.addEventListener("focusin", use);
       return () => {
-        stage.removeEventListener("pointermove", move);
-        stage.removeEventListener("pointerleave", settle);
-        G.set(tilt, { clearProps: "transform" });
+        win.removeEventListener("pointerenter", enter);
+        win.removeEventListener("pointerleave", leave);
+        win.removeEventListener("pointerdown", use);
+        win.removeEventListener("focusin", use);
+        win.classList.remove("is-flat");
       };
     },
   );

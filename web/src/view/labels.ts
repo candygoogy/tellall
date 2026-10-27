@@ -179,10 +179,6 @@ function renderTimeline(m: Model): void {
   html += `</div><p class="tl-note">${said}Times are UTC, from the label.</p>`;
   box.innerHTML = html;
   applyGeometry(box);
-  $$(".tl-ev .tl-name", box).forEach((n) => {
-    if (n.innerHTML.includes("<br>") && n.parentElement)
-      n.parentElement.style.top = "-14px";
-  });
 }
 
 function renderLabel(animate: boolean): void {
@@ -278,9 +274,15 @@ export function labelsPin(navHeight: () => number): void {
   }
   G.matchMedia().add("(min-width: 1024px)", () => {
     const fill = $("#steps-fill");
+    const grid = $(".labels-grid");
     pin = ScrollTrigger.create({
-      trigger: ".labels-grid",
-      start: () => `top ${navHeight() + 32}px`,
+      trigger: grid,
+      // Pinned in the middle of the screen when it fits, under the nav
+      // when it doesn't.
+      start: () => {
+        const room = window.innerHeight - navHeight() - grid.offsetHeight;
+        return `top ${navHeight() + Math.max(32, room / 2)}px`;
+      },
       end: "+=110%",
       pin: true,
       anticipatePin: 1,

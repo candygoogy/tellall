@@ -52,7 +52,7 @@
   .lc-fields dt { border-bottom: 0; padding-bottom: 2px; font-size: var(--t-data); }
   .lc-fields dd { padding-top: 0; }
   .tl { height: 96px; }
-  .tl-ev.is-alt { top: 41px; }
+  .tl-ev.is-alt { top: 42px; bottom: auto; gap: 0; }
   .tl-ev.is-alt .tl-dot { order: -1; margin: 0; }
   .tl-ev.is-alt .tl-name { margin-top: 22px; }
 }
