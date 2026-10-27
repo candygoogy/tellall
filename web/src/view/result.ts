@@ -588,7 +588,9 @@ function setPlateRatio(item: Item): void {
     if (none && heic) void heicPlate(item, none);
     return;
   }
-  if (item.ar) img.style.setProperty("--ar", item.ar);
+  // On the plate, so the plate's width can follow the height it has.
+  if (item.ar)
+    img.closest<HTMLElement>(".rv-plate")?.style.setProperty("--ar", item.ar);
   if (!item.thumbUrl) return;
   img.addEventListener(
     "error",
@@ -614,6 +616,11 @@ async function heicPlate(item: Item, slot: HTMLElement): Promise<void> {
     drawn.canvas.className = "rv-canvas";
     drawn.canvas.setAttribute("role", "img");
     drawn.canvas.setAttribute("aria-label", `Preview of ${item.name}`);
+    const { width, height } = drawn.canvas;
+    if (width && height)
+      slot
+        .closest<HTMLElement>(".rv-plate")
+        ?.style.setProperty("--ar", `${width} / ${height}`);
     slot.replaceWith(drawn.canvas);
     void drawn.sharpen();
   } catch {

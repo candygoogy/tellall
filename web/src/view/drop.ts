@@ -1,11 +1,14 @@
 // Images in: the "Choose images" buttons, a drop anywhere on the page, or
 // images pasted. Each file gets its own row in "Your files" and is read
-// in the engine's worker, one after another; up to 200 at once. Several
-// clean copies download together as one zip.
+// in the engine's worker, one after another; up to 200 at once (the rest
+// are left out, and the sidebar says so). An empty file gets a row that
+// says it couldn't be read. Several clean copies download together as
+// one zip, and a batch ends with one line said to a screen reader.
 import { $, $$, cleanName, download, fmt, maybe } from "../dom.ts";
 import { read, STALE } from "../engine.ts";
 import { announce, flash, saved } from "../feedback.ts";
 import { zip } from "../zip.ts";
+import { dotFor } from "./reader-html.ts";
 import {
   bringReaderIntoView,
   current,
@@ -51,21 +54,63 @@ async function thumbnail(file: File): Promise<string | undefined> {
 
 const HEIC = /\.(heic|heif)$/i;
 
+/** What an empty file's result says under "tellall couldn't read this file." */
+const EMPTY = "The file is empty: it has no bytes to read.";
+
+/** Said once a batch of several is read: "Read 60 files: 10 with AI
+ * labels, 3 couldn't be read." The counts follow the sidebar's dots. */
+function batchLine(items: Item[], left: number): string {
+  const count = (cls: string) =>
+    items.filter((x) => dotFor(x)[0] === cls).length;
+  const n = (k: number, one: string, many: string) =>
+    `${fmt(k)} ${k === 1 ? one : many}`;
+  const label = count("dot-label");
+  const about = count("dot-private");
+  const error = count("dot-error");
+  const said = [
+    label ? n(label, "with an AI label", "with AI labels") : "",
+    about ? n(about, "with personal data", "with personal data") : "",
+    error ? `${fmt(error)} couldn't be read` : "",
+  ].filter(Boolean);
+  const head = `Read ${left ? "the first " : ""}${fmt(items.length)} files`;
+  const tail = left ? `; ${fmt(left)} left out.` : ".";
+  return `${head}: ${said.length ? said.join(", ") : "no marks found"}${tail}`;
+}
+
 export async function readFiles(files: FileList | File[]): Promise<void> {
-  const list = Array.from(files)
-    .filter((f) => f.size > 0)
-    .slice(0, MOST);
+  const all = Array.from(files);
+  const list = all.slice(0, MOST);
+  const left = all.length - list.length;
   if (!list.length) return;
   bringReaderIntoView();
-  const items: Item[] = list.map((f) => ({
-    id: nextId(),
-    live: true,
-    kind: "file",
-    name: f.name,
-    size: f.size,
-    file: f,
-    state: "reading",
-  }));
+  // Past the most at once: the first are read, and the sidebar says how
+  // many were left out.
+  const note = $("#side-live-note");
+  note.textContent = left
+    ? `Read the first ${fmt(MOST)} files; ${fmt(left)} left out.`
+    : "";
+  note.hidden = !left;
+  const items: Item[] = list.map((f) =>
+    f.size > 0
+      ? {
+          id: nextId(),
+          live: true,
+          kind: "file",
+          name: f.name,
+          size: f.size,
+          file: f,
+          state: "reading",
+        }
+      : {
+          id: nextId(),
+          live: true,
+          kind: "file",
+          name: f.name,
+          size: 0,
+          state: "error",
+          error: EMPTY,
+        },
+  );
   // Newest batch first, each in the order it was chosen.
   live.unshift(...items);
   prune(MOST);
@@ -73,11 +118,12 @@ export async function readFiles(files: FileList | File[]): Promise<void> {
   const first = items[0];
   if (first) {
     first.focusOnRead = true;
-    first.thumbUrl = await thumbnail(first.file as File);
+    if (first.file) first.thumbUrl = await thumbnail(first.file);
     show(first, "swap");
   }
   for (const item of items) {
-    const file = item.file as File;
+    const file = item.file;
+    if (!file) continue;
     try {
       if (item !== first) item.thumbUrl = await thumbnail(file);
       renderLiveList();
@@ -112,6 +158,9 @@ export async function readFiles(files: FileList | File[]): Promise<void> {
     renderLiveList();
     if (current === item) show(item, "swap");
   }
+  // One file: its headline takes the focus (result.ts landed). Several:
+  // one line for the whole batch, never one per file.
+  if (items.length > 1) announce(batchLine(items, left));
 }
 
 export function initDrop(): void {

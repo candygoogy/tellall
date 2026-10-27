@@ -848,6 +848,90 @@ test("a batch is listed in the order it was chosen, its first file shown", async
   await readerShows(page, "gps.jpg");
 });
 
+test("a batch: an empty file gets a Couldn't read row, Download all clean leads the list, and one line sums it up", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await drop(page, [
+    fixtureDrop("photo/gps.jpg", "image/jpeg"),
+    fixtureDrop("photo/meta.png", "image/png"),
+    fixtureDrop("ai/chatgpt-image.png", "image/png"),
+    { name: "empty.png", b64: "", type: "image/png" },
+  ]);
+  const rows = page.locator("#side-live-list .file-item");
+  await expect(rows).toHaveCount(4);
+  await expect(page.locator("#side-live-list .dot-reading")).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  await expect(page.locator("#r-live")).toHaveText(
+    "Read 4 files: 1 with an AI label, 2 with personal data, 1 couldn't be read.",
+  );
+  const empty = rows.filter({ hasText: "empty.png" });
+  await expect(empty.locator(".fi-dot")).toHaveAttribute(
+    "aria-label",
+    "Couldn't read",
+  );
+  // Before the rows: in reach however long the list, and first for the keyboard.
+  const all = await page.locator("#dl-all").boundingBox();
+  const row = await rows.first().boundingBox();
+  expect(all && row && all.y + all.height <= row.y).toBe(true);
+  await empty.click();
+  await expect(page.locator("#r-view .rv-headline")).toHaveText(
+    "tellall couldn't read this file.",
+  );
+  await expect(page.locator("#r-view .rv-note")).toHaveText(
+    "The file is empty: it has no bytes to read.",
+  );
+});
+
+test("past 200 files at once: the first 200 are read, and the sidebar says how many were left out", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await drop(page, [
+    { name: "empty.png", b64: "", type: "image/png" },
+    { ...fixtureDrop("photo/gps.jpg", "image/jpeg"), copies: 201 },
+  ]);
+  await expect(page.locator("#side-live-list .file-item")).toHaveCount(200);
+  await expect(page.locator("#side-live-note")).toHaveText(
+    "Read the first 200 files; 2 left out.",
+  );
+  await expect(page.locator("#side-live-note")).toBeVisible();
+});
+
+test("760 to 1440 px: the picture's caption stays clear of the action bar, and the example names fit", async ({
+  page,
+}) => {
+  for (const reducedMotion of ["reduce", "no-preference"] as const) {
+    await page.emulateMedia({ reducedMotion });
+    for (const width of [760, 800, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/?still");
+      const examples = page.locator("#side-examples .file-item");
+      for (const ex of ["chatgpt", "gemini", "gps", "damaged"]) {
+        await page.locator(`#side-examples [data-ex="${ex}"]`).click();
+        await expect(page.locator("#r-view .rv-cap")).toBeVisible();
+        const gap = await page.evaluate(() => {
+          const box = (s: string) =>
+            (document.querySelector(s) as Element).getBoundingClientRect();
+          return box("#r-view .rv-actions").top - box("#r-view .rv-cap").bottom;
+        });
+        expect(
+          gap,
+          `${ex} at ${width} px, ${reducedMotion}`,
+        ).toBeGreaterThanOrEqual(0);
+      }
+      const cut = await examples.evaluateAll((bs) =>
+        bs
+          .map((b) => b.querySelector(".fi-name") as HTMLElement)
+          .filter((n) => n.scrollWidth > n.clientWidth)
+          .map((n) => n.textContent),
+      );
+      expect(cut, `names cut at ${width} px`).toEqual([]);
+    }
+  }
+});
+
 test("the result's headline takes the focus after a reading the visitor started", async ({
   page,
 }) => {

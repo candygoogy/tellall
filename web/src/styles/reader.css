@@ -18,6 +18,7 @@
 .crumbs { display: flex; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--ink-3); min-width: 0; }
 .crumbs-mark { width: 16px; height: 16px; fill: var(--ink-3); color: var(--ink-3); flex: none; }
 .crumbs-name { color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumbs-group { white-space: nowrap; flex: none; }
 .crumbs-sep { color: var(--ctl); }
 /* a new text is in no list yet: its name alone */
 .crumbs.is-solo .crumbs-group, .crumbs.is-solo .crumbs-sep { display: none; }
@@ -48,8 +49,9 @@
 .dot-reading { background: var(--cursor); animation: blink var(--blink) steps(1, end) 5 both; }
 /* couldn't read: a dash, nothing where a mark would be */
 .fi-dot.dot-error, .side-legend .dot-error { height: 2px; background: var(--ink-3); }
-.side-all { margin: 8px 8px 0; }
-.side-note { margin: 8px 8px 0; font-size: var(--t-data); line-height: 1.45; color: var(--ink-2); }
+/* download all leads the list, so a long list never pushes it out of reach (or past every row for the keyboard) */
+.side-all { margin: 0 8px 8px; }
+.side-note { margin: 0 8px 8px; font-size: var(--t-data); line-height: 1.45; color: var(--ink-2); }
 /* the way to add more stays at the bottom of the sidebar, however long the lists */
 .side-foot { position: sticky; bottom: -14px; z-index: 1; margin: auto -10px -14px; padding: 12px 18px 14px; display: grid; gap: 8px; background: var(--win); border-top: 1px solid var(--hair-2); }
 .side-add { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -73,6 +75,8 @@
 /* the scan is the cursor: a block that steps down the picture row by row */
 .scan { position: absolute; left: 0; right: 0; top: 0; height: 10px; background: rgb(var(--cursor-rgb) / 0.55); mix-blend-mode: screen; opacity: 0; pointer-events: none; }
 .rv-cap { margin-top: 10px; font-size: var(--t-data); color: var(--ink-3); }
+/* the picture fits the height between the file to scale and the actions (they wrap to two lines on narrower windows), so its caption never runs under them; --ar is the picture's shape (result.ts) */
+@media (min-width: 760px) { .rv-top { container-type: size; } .rv-plate { max-width: calc((100cqh - 56px) * var(--ar, 1)); } }
 .rv-report { min-height: 0; overflow-y: auto; padding-right: 6px; padding-bottom: 12px; }
 .rv-report:focus-visible { outline-offset: -2px; }
 .rv-status { font-size: var(--t-small); color: var(--cursor); margin-bottom: 8px; }

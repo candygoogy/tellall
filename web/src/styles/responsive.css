@@ -1,6 +1,9 @@
 /* ---------- product window, smaller screens ---------- */
 @media (max-width: 1023px) {
-  .win-body { grid-template-columns: 184px 1fr; }
+  /* room for a name like chatgpt-image.png: a wider sidebar, smaller thumbnails */
+  .win-body { grid-template-columns: 208px 1fr; }
+  .file-item { grid-template-columns: 24px 1fr auto; gap: 8px; }
+  .fi-thumb { width: 24px; height: 24px; }
   .rv-top { grid-template-columns: 180px 1fr; gap: 20px; padding: 20px 20px 0; }
   .rv-anatomy, .rv-actions { padding-left: 20px; padding-right: 20px; }
   .hint { margin-left: 0; }
@@ -24,7 +27,7 @@
   .side-foot { order: -1; position: static; margin: 0; padding: 0; align-self: center; background: none; border: 0; }
   .side-add { flex-wrap: nowrap; }
   .side-foot .btn { height: 44px; }
-  .side-all { margin: 0 0 0 6px; height: 44px; }
+  .side-all { margin: 0 6px 0 0; height: 44px; }
   #side-live { display: flex; align-items: center; }
   #side-live[hidden] { display: none; }
   .view { position: relative; inset: auto; }
