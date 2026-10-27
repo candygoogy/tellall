@@ -2,7 +2,10 @@
   "name": "@tellall/engine",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./checkers": "./src/words/checkers.ts"
+  },
   "dependencies": {
     "@trustnxt/c2pa-ts": "0.14.1",
     "exifr": "7.1.3",

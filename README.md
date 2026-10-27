@@ -16,7 +16,7 @@ chatgpt-image.png
   · No location, camera or other personal data.
 ```
 
-That is an image downloaded from ChatGPT on 25 October 2026, as it came. An image from Gemini gets the same headline, with a label signed by Google LLC that also states a watermark.
+That is an image downloaded from ChatGPT on 25 October 2026, as it came. An image from Gemini gets the same headline, with a label signed by Google LLC that also names its watermark, SynthID.
 
 ## What it reads
 
@@ -82,6 +82,7 @@ chatgpt-image.png
 
 gps.jpg
   Wrote gps.clean.jpg
+  Removed location, camera and device details, dates and times, software names and other details: 951 bytes.
 ```
 
 On files you own, `--remove-labels` also takes the AI label out:
@@ -90,6 +91,7 @@ On files you own, `--remove-labels` also takes the AI label out:
 $ npx tellall clean --remove-labels chatgpt-image.png
 chatgpt-image.png
   Wrote chatgpt-image.clean.png
+  Removed the AI label: 21,893 bytes.
 
 AI labels removed. The invisible watermark in the pixels (if any) stays; this tool can't remove it.
 ```
@@ -129,7 +131,7 @@ Files never leave your device. The page reads them in a Web Worker in your brows
 
 ## Limits
 
-- tellall can't see or remove watermarks hidden in the pixels, such as Google's SynthID, or statistical watermarks in text. It reports what an AI label says about a watermark, and a clean copy keeps the watermark.
+- tellall can't see or remove watermarks hidden in the pixels, such as Google's SynthID, or statistical watermarks in text. It reports what an AI label says about a watermark and names it only when the label does (Gemini's names SynthID; ChatGPT's only says the image was watermarked). A clean copy keeps the watermark. Under that sentence the web page links the makers' own checkers: Google's [SynthID Detector](https://synthid.com/) (needs sign-in) when the label names SynthID, [OpenAI's checker](https://openai.com/verify) when OpenAI signed the label. They're plain links; tellall sends nothing.
 - No marks found doesn't mean a person made the file. Many apps and sites strip labels and metadata when you upload.
 - It checks that a label's signature matches the file. It doesn't check who stands behind the certificate.
 - WebP labels can be found but not read yet.

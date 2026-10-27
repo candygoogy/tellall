@@ -55,6 +55,8 @@ describe("chatgpt image", () => {
     );
     expect(label.digitalSourceType).toBe(AI_MEDIA);
     expect(label.watermarkStated).toBe(true);
+    // c2pa.watermarked.unbound names no watermark: not named here.
+    expect(label.watermarkName).toBe(null);
     expect(label.ingredients).toBe(0);
     expect(label.detailsUnavailable).toBe(false);
   });
@@ -127,6 +129,8 @@ describe("gemini image", () => {
     ]);
     expect(label.digitalSourceType).toBe(AI_MEDIA);
     expect(label.watermarkStated).toBe(true);
+    // "Applied imperceptible SynthID watermark." names it.
+    expect(label.watermarkName).toBe("SynthID");
     expect(label.ingredients).toBe(1);
     expect(label.detailsUnavailable).toBe(false);
   });

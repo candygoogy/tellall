@@ -6,8 +6,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { inspect } from "@tellall/engine";
+import { watermarkCheckers } from "@tellall/engine/checkers";
 import { unzipSync } from "fflate";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { textName } from "../src/view/reader-html.ts";
 
 const FIXTURES = new URL("../../fixtures/", import.meta.url);
 const bytesOf = (path: string) =>
@@ -225,6 +227,31 @@ for (const [path, type] of [
     await expect(
       page.locator('#r-view .an-main .part[data-kind="label"]'),
     ).toHaveCount(1);
+    // Under the watermark sentence, where to check for it: Google's
+    // SynthID Detector when the label names SynthID (Gemini's does),
+    // OpenAI's own checker when OpenAI signed it (its label names no
+    // watermark). Plain links in a new tab; nothing is sent.
+    const sentence = expected.findings.find((f) =>
+      f.sentence.includes("invisible watermark"),
+    )?.sentence;
+    expect(sentence).toBeDefined();
+    const item = page
+      .locator("#r-view .rv-findings li")
+      .filter({ hasText: sentence ?? "" });
+    const href = path.includes("gemini")
+      ? "https://synthid.com/"
+      : "https://openai.com/verify";
+    expect(watermarkCheckers(sentence ?? "").map((c) => c.url)).toEqual([href]);
+    const link = item.locator("a.f-check");
+    await expect(link).toHaveCount(1);
+    await expect(link).toHaveAttribute("href", href);
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener");
+    await expect(link).toContainText(
+      path.includes("gemini") ? "SynthID Detector" : "OpenAI",
+    );
+    // Only that sentence has one.
+    await expect(page.locator("#r-view a.f-check")).toHaveCount(1);
   });
 }
 
@@ -245,6 +272,10 @@ test("gps.jpg: the location, and a clean copy without it", async ({ page }) => {
   await page.locator("#r-view .js-dl").click();
   const saved = await download;
   expect(saved.suggestedFilename()).toBe("gps.clean.jpg");
+  // The page says it's saved, as it does for an example's copy.
+  await expect(page.locator("#r-view .js-dl-status")).toHaveText(
+    /^Saved gps\.clean\.jpg: [\d,]+ bytes, [\d,]+ bytes of personal data removed\.$/,
+  );
   const path = await saved.path();
   const copy = await inspect({
     kind: "file",
@@ -279,7 +310,8 @@ test("pasted text: hidden characters marked, copied back as plain text", async (
   await withClipboard(async () => {
     await page.locator(".hero .hero-actions .js-paste").click();
     await paste(page, browserName, page.locator("#paste-area"), plain, html);
-    await readerShows(page, "Pasted text");
+    // Named by its first words.
+    await readerShows(page, textName(plain).name);
     await expect(page.locator("#r-view .rv-headline")).toHaveText(
       expected.headline,
     );
@@ -457,11 +489,63 @@ test("200 small files: every one gets its row, and the page keeps answering", as
   await expect(page.locator("#side-live-list .dot-reading")).toHaveCount(0);
   await expect(rows).toHaveCount(200);
   await expect(rows.filter({ hasText: "meta-005.png" })).toHaveCount(1);
-  await expect(rows.filter({ hasText: "gps-001.jpg" })).toHaveCount(0);
+  // Each batch is listed in the order it was chosen, so the bottom of the
+  // list goes first: the first batch's last files.
+  await expect(rows.filter({ hasText: "gps-200.jpg" })).toHaveCount(0);
+  await expect(rows.filter({ hasText: "gps-001.jpg" })).toHaveCount(1);
   const gap = await page.evaluate(
     () => (window as unknown as { __gap: number }).__gap,
   );
   expect(gap).toBeLessThan(500);
+});
+
+test("a long list: the legend stays in view with the buttons, wherever the list is scrolled", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?still");
+  await drop(page, [
+    { ...fixtureDrop("photo/gps.jpg", "image/jpeg"), copies: 30 },
+  ]);
+  await expect(page.locator("#side-live-list .file-item")).toHaveCount(30);
+  const side = page.locator(".side");
+  expect(
+    await side.evaluate((s) => s.scrollHeight > s.clientHeight + 100),
+  ).toBe(true);
+  for (const at of ["top", "middle", "bottom"] as const) {
+    await side.evaluate((s, at) => {
+      const end = s.scrollHeight - s.clientHeight;
+      s.scrollTop = at === "top" ? 0 : at === "middle" ? end / 2 : end;
+    }, at);
+    // Each of its marks is the thing under its own middle, inside the
+    // sidebar: nothing covers it and it isn't scrolled away.
+    const seen = await page.evaluate(() => {
+      const box = (
+        document.querySelector(".side") as Element
+      ).getBoundingClientRect();
+      return Array.from(document.querySelectorAll(".side-legend span")).map(
+        (el) => {
+          const r = el.getBoundingClientRect();
+          const x = r.left + r.width / 2;
+          const y = r.top + r.height / 2;
+          const inside =
+            r.top >= box.top && r.bottom <= box.bottom && r.height > 0;
+          const hit = document.elementFromPoint(x, y);
+          return inside && !!hit && el.contains(hit);
+        },
+      );
+    });
+    expect(seen, `legend seen with the list at its ${at}`).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
+  }
+  // Above the buttons.
+  const legend = await page.locator(".side-legend").boundingBox();
+  const add = await page.locator(".side-add").boundingBox();
+  expect(legend && add && legend.y + legend.height <= add.y).toBe(true);
 });
 
 test("offline after loading: a photo is still read", async ({
@@ -550,6 +634,9 @@ test("download all clean: one zip with each clean copy", async ({ page }) => {
   await page.locator("#dl-all").click();
   const saved = await download;
   expect(saved.suggestedFilename()).toBe("tellall-clean.zip");
+  await expect(page.locator("#dl-all-note")).toHaveText(
+    "Saved tellall-clean.zip: 2 clean copies.",
+  );
   const files = unzipSync(new Uint8Array(readFileSync(await saved.path())));
   expect(Object.keys(files).sort()).toEqual([
     "gps.clean.jpg",
@@ -559,4 +646,231 @@ test("download all clean: one zip with each clean copy", async ({ page }) => {
     const r = await inspect({ kind: "file", name, bytes });
     expect(r.findings.filter((f) => f.kind === "private")).toEqual([]);
   }
+});
+
+/* ------------------------------------------------- the visitor's own texts */
+
+test("text: a paste, New text and a second paste make two rows, each named by its words", async ({
+  page,
+  browserName,
+}) => {
+  const first = "The first text, pasted in the reader.​";
+  const second = "A second text⁠ after New text.";
+  await page.goto("/?still");
+  await page.locator(".hero .hero-actions .js-paste").click();
+  // A new text is in no list yet: its name alone in the window's title.
+  await expect(page.locator(".crumbs")).toHaveClass(/is-solo/);
+  await expect(page.locator("#paste-area")).toBeFocused();
+  await withClipboard(async () => {
+    await paste(page, browserName, page.locator("#paste-area"), first, "");
+    await readerShows(page, textName(first).name);
+    await page.locator("#r-view .js-new-text").click();
+    await expect(page.locator("#r-name")).toHaveText("New text");
+    await expect(page.locator("#paste-area")).toBeFocused();
+    await expect(page.locator("#paste-area")).toHaveValue("");
+    await paste(page, browserName, page.locator("#paste-area"), second, "");
+    await readerShows(page, textName(second).name);
+  });
+  await expect(page.locator("#side-live-list .fi-name")).toHaveText([
+    textName(second).name,
+    textName(first).name,
+  ]);
+});
+
+test("text: an edit is read again, and the name follows the words", async ({
+  page,
+}) => {
+  const hidden = "Send it today.​";
+  const plain = "Nothing hidden here at all.";
+  const before = await inspect({ kind: "text", plain: hidden });
+  const after = await inspect({ kind: "text", plain });
+  await page.goto("/?still");
+  await page.locator(".hero .hero-actions .js-paste").click();
+  const box = page.locator("#paste-area");
+  await box.fill(hidden);
+  await expect(page.locator("#r-view .rv-headline")).toHaveText(
+    before.headline,
+  );
+  await expect(page.locator("#r-view .tx .chip")).toHaveCount(1);
+  await box.fill(plain);
+  await expect(page.locator("#r-view .rv-headline")).toHaveText(after.headline);
+  await expect(page.locator("#r-view .tx .chip")).toHaveCount(0);
+  // The same text, its row renamed.
+  await expect(page.locator("#side-live-list .fi-name")).toHaveText([
+    textName(plain).name,
+  ]);
+  await expect(box).toBeFocused();
+});
+
+test("text: what was typed survives switching to another item and back", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await page.locator(".hero .hero-actions .js-paste").click();
+  await page.locator("#paste-area").fill("Typed, then straight to an example");
+  // At once, before the box's own reading is due.
+  await page.locator('#side-examples [data-ex="gps"]').click();
+  await expect(page.locator("#r-name")).toHaveText("gps.jpg");
+  await page.locator("#side-live-list .file-item").first().click();
+  await expect(page.locator("#paste-area")).toHaveValue(
+    "Typed, then straight to an example",
+  );
+});
+
+test("text: Ctrl+Enter (⌘+Enter) reads at once; an empty box says what to do", async ({
+  page,
+}) => {
+  // The page's clock stands still: the box's 220 ms never pass by
+  // themselves.
+  await page.clock.install();
+  await page.goto("/?still");
+  await page.locator(".hero .hero-actions .js-paste").click();
+  const box = page.locator("#paste-area");
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(page.locator("#r-view .js-copy-status")).toHaveText(
+    "Paste or type some text first.",
+  );
+  await box.fill("Read me now.​");
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(page.locator("#r-view .rv-headline")).toHaveText(
+    (await inspect({ kind: "text", plain: "Read me now.​" })).headline,
+  );
+  await expect(page.locator("#r-view .js-copy-status")).toHaveText("");
+});
+
+test("text: one left empty leaves the list once another item is chosen", async ({
+  page,
+}) => {
+  const first = "The first text, kept.";
+  const second = "The second text, soon emptied.";
+  const rows = page.locator("#side-live-list .fi-name");
+  await page.goto("/?still");
+  await page.locator(".hero .hero-actions .js-paste").click();
+  const box = page.locator("#paste-area");
+  await box.fill(first);
+  await expect(rows).toHaveText([textName(first).name]);
+  await page.locator("#r-view .js-new-text").click();
+  await box.fill(second);
+  await expect(rows).toHaveText([textName(second).name, textName(first).name]);
+  // Emptied while on it: the row stays, as the words may come back.
+  await box.fill("");
+  await expect(rows).toHaveText(["New text", textName(first).name]);
+  await expect(box).toBeFocused();
+  // Another row chosen: the empty text goes.
+  await page
+    .locator("#side-live-list .file-item", { hasText: textName(first).name })
+    .click();
+  await expect(box).toHaveValue(first);
+  await expect(rows).toHaveText([textName(first).name]);
+  // Spaces alone are empty too; an example chosen at once, before the box's
+  // own reading is due, takes it out as well.
+  await box.fill("   ");
+  await page.locator('#side-examples [data-ex="gps"]').click();
+  await expect(page.locator("#r-name")).toHaveText("gps.jpg");
+  await expect(rows).toHaveCount(0);
+  await expect(page.locator("#side-live")).toBeHidden();
+});
+
+/* -------------------------------------------------- the visitor's own files */
+
+test("a file tellall can't read: the Couldn't read dot, and no file to scale", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await drop(page, [
+    {
+      name: "anim.gif",
+      b64: Buffer.from("GIF89a\x01\x00\x01\x00\x00\x00\x00;").toString(
+        "base64",
+      ),
+      type: "image/gif",
+    },
+  ]);
+  await readerShows(page, "anim.gif");
+  const dot = page.locator("#side-live-list .fi-dot");
+  await expect(dot).toHaveClass(/dot-error/);
+  await expect(dot).toHaveAttribute("aria-label", "Couldn't read");
+  await expect(page.locator("#r-status-text .st-long")).toHaveText(
+    "Can't read this kind of file",
+  );
+  await expect(page.locator("#r-view")).toContainText(
+    "tellall reads JPEG, PNG, WebP and HEIC images, and text you paste.",
+  );
+  await expect(page.locator("#r-view .an-main")).toHaveCount(0);
+  await expect(page.locator("#r-view .rv-plate")).toHaveCount(0);
+  await expect(page.locator("#r-view .js-choose")).toHaveText(
+    "Choose another image",
+  );
+});
+
+test("a batch is listed in the order it was chosen, its first file shown", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await drop(page, [
+    fixtureDrop("photo/gps.jpg", "image/jpeg"),
+    fixtureDrop("photo/meta.png", "image/png"),
+  ]);
+  await expect(page.locator("#side-live-list .fi-name")).toHaveText([
+    "gps.jpg",
+    "meta.png",
+  ]);
+  await readerShows(page, "gps.jpg");
+});
+
+test("the result's headline takes the focus after a reading the visitor started", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await drop(page, [fixtureDrop("photo/gps.jpg", "image/jpeg")]);
+  await readerShows(page, "gps.jpg");
+  await expect(page.locator("#r-view .rv-headline")).toBeFocused();
+  // Picking a row doesn't pull the focus into the result.
+  await page.locator('#side-examples [data-ex="chatgpt"]').click();
+  await expect(page.locator("#r-name")).toHaveText("chatgpt-image.png");
+  await expect(page.locator("#r-view .rv-headline")).not.toBeFocused();
+});
+
+/* ----------------------------------------------------------- page details */
+
+test("copy: a button's label goes back to its own after a double click and a tab switch", async ({
+  page,
+  context,
+  browserName,
+}) => {
+  if (browserName === "chromium")
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/?still");
+  const copy = page.locator("#term-copy");
+  const label = copy.locator("span");
+  await withClipboard(async () => {
+    await copy.dblclick();
+    await expect(label).not.toHaveText("Copy command");
+    await expect(label).toHaveText("Copy command", { timeout: 4000 });
+    // The second click's timer didn't keep "Copied" as the label.
+    await page.waitForTimeout(2000);
+    await expect(label).toHaveText("Copy command");
+    // Copied on one tab, then the other: that tab's own label at once.
+    await page.locator("#tt-agent").click();
+    await expect(label).toHaveText("Copy install command");
+    await copy.click();
+    await page.locator("#tt-cli").click();
+    await expect(label).toHaveText("Copy command");
+    await page.waitForTimeout(2000);
+    await expect(label).toHaveText("Copy command");
+  });
+});
+
+test("reduced motion: no replay buttons, as there's nothing to replay", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await expect(page.locator("#r-replay")).toBeHidden();
+  await expect(page.locator("#net-replay")).toBeHidden();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(page.locator("#r-replay")).toBeVisible();
+  await page.locator("#privacy").scrollIntoViewIfNeeded();
+  await expect(page.locator("#net-replay")).toBeVisible();
 });

@@ -12,6 +12,7 @@ import type { ExampleData } from "../src/example-types.ts";
 import {
   exampleItem,
   fileViewHTML,
+  dotFor,
   statusHTML,
 } from "../src/view/reader-html.ts";
 import type { Examples } from "./example-data.ts";
@@ -39,14 +40,7 @@ async function makeExamples(): Promise<Examples> {
 /** The sidebar's example list, as index.html first paints it. */
 function exampleList(data: ExampleData): string {
   const dot = (r: Report) =>
-    r.findings.some((f) => f.kind === "label")
-      ? ["dot-label", "AI label"]
-      : r.findings.some((f) => f.kind === "private")
-        ? [
-            "dot-private",
-            r.format === "text" ? "Hidden characters" : "Personal data",
-          ]
-        : ["dot-none", "No marks"];
+    dotFor({ kind: r.format === "text" ? "text" : "file", report: r });
   const item = (
     key: string,
     thumb: string,
@@ -55,7 +49,7 @@ function exampleList(data: ExampleData): string {
     first: boolean,
   ) => {
     const [cls, said] = dot(r);
-    return `<li><button class="file-item" type="button" data-ex="${key}"${first ? ' aria-current="true"' : ""}>${thumb}<span class="fi-name">${esc(name)}</span><span class="fi-dot ${cls}" aria-label="${said}"></span></button></li>`;
+    return `<li><button class="file-item" type="button" data-ex="${key}"${first ? ' aria-current="true"' : ""}>${thumb}<span class="fi-name" title="${esc(name)}">${esc(name)}</span><span class="fi-dot ${cls}" aria-label="${said}"></span></button></li>`;
   };
   const files = Object.values(data.files).map((f, i) =>
     item(
@@ -106,30 +100,41 @@ function heroDump(data: ExampleData, bytes: Uint8Array): string {
   ].join("\n");
 }
 
-/** The footer's dump: the file's last 16 bytes, the cursor resting on
- * IEND (its last 8 alone on narrow screens). */
+/** The footer's dump: the file's last 16 bytes in the hero's grid, set as
+ * two 8-byte halves (one row of 16 on wide screens, two rows of 8 on
+ * narrow ones), the cursor resting on IEND. */
 function footDump(data: ExampleData, bytes: Uint8Array): string {
   const r = data.files.chatgpt.report;
   const n = bytes.length;
-  const last = [...bytes.subarray(n - 16)];
   // A PNG ends with IEND's chunk: its length, "IEND", its checksum.
   const end = n - 8;
-  const cells = last.map((v, k) => {
-    const i = n - 16 + k;
-    const c = [
-      k < 8 ? "fd-wide" : "",
-      i >= end && i < end + 4 ? "is-end" : "",
-      i === end ? "cur" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    return `<i${c ? ` class="${c}"` : ""}>${hex2(v)}</i>`;
-  });
-  const text = (a: number[]) => esc(a.map(ascii).join(""));
+  const half = (from: number, k: 1 | 2) => {
+    const idx = Array.from({ length: 8 }, (_, j) => from + j);
+    const cells = idx.map((i) => {
+      const c = [
+        i >= end && i < end + 4 ? "is-end" : "",
+        i === end ? "cur" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `<i${c ? ` class="${c}"` : ""}>${hex2(bytes[i] ?? 0)}</i>`;
+    });
+    const text = idx
+      .map((i) => {
+        const ch = esc(ascii(bytes[i] ?? 0));
+        return i >= end && i < end + 4 ? `<i class="is-end">${ch}</i>` : ch;
+      })
+      .join("");
+    return [
+      `<span class="fd-off fd-off${k}">${from.toString(16).padStart(8, "0")}</span>`,
+      `<span class="fd-hex fd-hex${k}">${cells.join("")}</span>`,
+      `<span class="fd-asc fd-asc${k}">${text}</span>`,
+    ].join("");
+  };
   return [
     `<div class="foot-dump" aria-hidden="true">`,
-    `<p class="fd-cap">${esc(r.name)} · its last 16 bytes · the file ends at IEND</p>`,
-    `<p class="fd-row"><span class="fd-off fd-wide">${(n - 16).toString(16).padStart(8, "0")}</span><span class="fd-off fd-narrow">${(n - 8).toString(16).padStart(8, "0")}</span><span class="fd-hex">${cells.join("")}</span><span class="fd-asc"><span class="fd-wide">${text(last.slice(0, 8))}</span>${text(last.slice(8))}</span></p>`,
+    `<p class="fd-cap"><span>${esc(r.name)}</span><span class="fd-sep"> · </span><span>its last 16 bytes</span><span class="fd-sep fd-sep2"> · </span><span>the file ends at IEND</span></p>`,
+    `<p class="fd-row">${half(n - 16, 1)}${half(n - 8, 2)}</p>`,
     `</div>`,
   ].join("\n");
 }

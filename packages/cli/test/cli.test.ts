@@ -133,7 +133,7 @@ describe("tellall <file>", () => {
     const r = tellall([]);
     expect(r.code).toBe(2);
     expect(r.out).toBe("");
-    expect(r.err).toContain("Usage");
+    expect(r.err).toContain("Usage: tellall");
     expect(tellall(["--fail-on", "maybe", CHATGPT]).code).toBe(2);
   });
 
@@ -218,7 +218,7 @@ describe("clean: which files are inputs", () => {
       readFileSync(GPS),
     );
     expect(() => statSync(join(dir, "b.clean.clean.jpg"))).toThrow();
-    expect(r.err).toBe("tellall: Skipped 1 clean copy tellall made earlier.\n");
+    expect(r.err).toBe("\ntellall: skipped 1 clean copy made earlier.\n");
   });
 
   test("several folders keep their names under -o; a file named twice is cleaned once", () => {
@@ -261,7 +261,7 @@ describe("clean: writing copies", () => {
     const r = tellall(["clean", join(dir, "gps.jpg")]);
     expect(r.code).toBe(2);
     expect(r.out).toBe("");
-    expect(r.err).toMatch(/gps\.clean\.jpg is already there\. Add --force/);
+    expect(r.err).toMatch(/gps\.clean\.jpg is already there; add --force/);
     expect(readFileSync(join(dir, "gps.clean.jpg"))).toEqual(before);
     expect(leftovers(dir)).toEqual([]);
   });
@@ -286,7 +286,7 @@ describe("clean: writing copies", () => {
     const r = tellall(["clean", join(dir, "damaged.jpg")]);
     expect(r.code).toBe(2);
     expect(r.out).toBe("");
-    expect(r.err).toContain("damaged, so tellall can't make a clean copy");
+    expect(r.err).toContain("damaged, so it can't make a clean copy");
   });
 });
 
@@ -299,7 +299,7 @@ describe("folders", () => {
     const r = tellall([loop]);
     expect(r.code).toBe(0);
     expect(r.out.match(/gps\.jpg\n/g)).toHaveLength(1);
-    expect(r.err).toContain("Skipped 1 link inside folders");
+    expect(r.err).toContain("skipped 1 link inside folders");
     const named = tellall([join(dir, "back")]);
     expect(named.code).toBe(0);
     expect(named.out).toMatch(/back\/sub\/gps\.jpg\n/);
@@ -312,28 +312,50 @@ describe("folders", () => {
     const r = tellall(["--fail-on", "private", join(tmp, "pub")]);
     expect(r.code).toBe(0);
     expect(r.err).toBe(
-      "tellall: Skipped 2 folders named node_modules or starting with a dot.\n",
+      "\ntellall: skipped 2 folders named node_modules or starting with a dot.\n",
     );
   });
 });
 
 describe("reading", () => {
-  test("a file of another kind is listed without being read, whatever its size", () => {
-    const dir = folder("video", {});
-    const file = join(dir, "long.mp4");
+  /** A file over 2 GiB, more than Node reads into one buffer, that starts
+   * with an ISO media header: reading it all fails. */
+  function huge(name: string, ftyp: string) {
+    const file = join(folder("huge", {}), name);
     const head = Buffer.alloc(32);
     head.writeUInt32BE(32, 0);
-    head.write("ftypisomisomiso2mp41", 4);
+    head.write(ftyp, 4);
     writeFileSync(file, head);
-    // Over 2 GiB, more than Node reads into one buffer: reading it all
-    // would fail.
     truncateSync(file, 2 ** 31 + 2 ** 20);
+    return file;
+  }
+
+  test.each([
+    ["long.mp4", "ftypisomisomiso2mp41"],
+    // An AVIF lists plain HEIF's brand too.
+    ["photo.avif", "ftypmif1\0\0\0\0avifmiaf"],
+  ])(
+    "a file of another kind is listed without being read, whatever its size (%s)",
+    (name, ftyp) => {
+      const file = huge(name, ftyp);
+      try {
+        const r = tellall(["--fail-on", "any", file]);
+        expect(r.err).toBe("");
+        expect(r.code).toBe(0);
+        expect(r.out).toContain("tellall can't read this kind of file yet.");
+        expect(tellall(["clean", file]).code).toBe(0);
+      } finally {
+        rmSync(file);
+      }
+    },
+  );
+
+  test("a file of a kind the engine reads is read in full", () => {
+    const file = huge("photo.heic", "ftypheic\0\0\0\0mif1heic");
     try {
-      const r = tellall(["--fail-on", "any", file]);
-      expect(r.err).toBe("");
-      expect(r.code).toBe(0);
-      expect(r.out).toContain("tellall can't read this kind of file yet.");
-      expect(tellall(["clean", file]).code).toBe(0);
+      const r = tellall([file]);
+      expect(r.code).toBe(2);
+      expect(r.err).toContain("it's larger than 2 GiB");
     } finally {
       rmSync(file);
     }
@@ -406,5 +428,102 @@ describe("arguments", () => {
     expect(r.out).toContain(
       "Exit codes: 0 done; 1 --fail-on matched; 2 usage, read or write error",
     );
+  });
+});
+
+describe("usage errors and help", () => {
+  test("a usage error is short: message, one usage line, where to look", () => {
+    const r = tellall(["--fail-on", "maybe", CHATGPT]);
+    expect(r.code).toBe(2);
+    expect(r.out).toBe("");
+    const lines = r.err.trimEnd().split("\n");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe("tellall: --fail-on takes private, label or any.");
+    expect(lines[1]).toMatch(/^Usage: tellall /);
+    expect(lines[2]).toBe("Run tellall --help for all options.");
+    expect(r.err).not.toContain("Exit codes");
+    const c = tellall(["clean"]);
+    expect(c.err).toContain("tellall: name a file or folder to clean.");
+    expect(c.err).toContain("Usage: tellall clean [options]");
+  });
+
+  test("an unknown flag suggests the nearest one within 2 edits", () => {
+    expect(tellall(["--jsn", CHATGPT]).err).toContain(
+      "tellall: unknown option --jsn; did you mean --json?",
+    );
+    expect(tellall(["clean", "--forse", GPS]).err).toContain(
+      "did you mean --force?",
+    );
+    const far = tellall(["--banana", CHATGPT]);
+    expect(far.code).toBe(2);
+    expect(far.err).toContain("tellall: unknown option --banana.\n");
+    expect(far.err).not.toContain("did you mean");
+  });
+
+  test("--help opens with a description and ends with three examples", () => {
+    const r = tellall(["--help"]);
+    expect(r.code).toBe(0);
+    expect(r.out.split("\n")[0]).toMatch(
+      /^Shows what an image or a text tells/,
+    );
+    const examples = r.out.slice(r.out.indexOf("Examples:")).split("\n");
+    const shown = examples.filter((l) => /^ {2}tellall /.test(l));
+    expect(shown).toHaveLength(3);
+    expect(shown[0]).toContain("tellall -- ");
+    expect(shown[1]).toContain("tellall clean -- ");
+    expect(shown[2]).toContain("tellall --fail-on private -- ");
+  });
+});
+
+describe("clean: what was removed", () => {
+  test("a copy lists what was removed, with the byte count", () => {
+    const dir = folder("removed", {
+      "gps.jpg": GPS,
+      "chatgpt-image.png": CHATGPT,
+    });
+    const r = tellall([
+      "clean",
+      join(dir, "gps.jpg"),
+      join(dir, "chatgpt-image.png"),
+    ]);
+    expect(r.code).toBe(0);
+    const bytes =
+      readFileSync(GPS).length -
+      readFileSync(join(dir, "gps.clean.jpg")).length;
+    const m = /gps\.clean\.jpg\n {2}Removed (.+): ([\d,]+) bytes\.\n/.exec(
+      r.out,
+    );
+    expect(m?.[1]).toContain("location");
+    expect(Number(m?.[2]?.replaceAll(",", ""))).toBe(bytes);
+    // Nothing removed: no Removed line, the note says so.
+    expect(r.out).toMatch(
+      /chatgpt-image\.png\n {2}Wrote .*\n {2}· Nothing private/,
+    );
+  });
+
+  test("a re-run says copies are already there in one line", () => {
+    const dir = folder("rerun", { "a.jpg": GPS, "b.jpg": GPS, "c.jpg": GPS });
+    const files = ["a.jpg", "b.jpg", "c.jpg"].map((f) => join(dir, f));
+    expect(tellall(["clean", ...files]).code).toBe(0);
+    const r = tellall(["clean", ...files]);
+    expect(r.code).toBe(2);
+    expect(r.out).toBe("");
+    expect(r.err).toBe(
+      "tellall: 3 clean copies already there; add --force to replace them.\n",
+    );
+  });
+
+  test("an error after a block has a blank line before it and says tellall once", () => {
+    const dir = folder("between", {
+      "a.jpg": GPS,
+      "damaged.jpg": DAMAGED,
+      "z.png": CHATGPT,
+    });
+    const r = tellall(["clean", dir]);
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(
+      /^\ntellall: \S+damaged\.jpg: this file is damaged, so it can't make a clean copy of it\.\n$/,
+    );
+    expect(r.err.match(/tellall: /g)).toHaveLength(1);
   });
 });

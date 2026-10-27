@@ -57,6 +57,7 @@
     <div class="nav-end">
       <a class="nav-gh" href="https://github.com/candygoogy/tellall">GitHub</a>
       <button class="btn btn-primary btn-sm js-choose nav-cta" type="button">Choose images</button>
+      <button class="btn btn-secondary btn-sm js-paste nav-cta" type="button">Paste text</button>
       <button class="nav-menu" type="button" aria-expanded="false" aria-controls="nav-sheet">Menu</button>
     </div>
   </div>
@@ -105,6 +106,7 @@
                   <h2 class="side-title">Your files</h2>
                   <ul class="side-list" id="side-live-list"></ul>
                   <button class="btn btn-secondary btn-sm side-all" id="dl-all" type="button" hidden><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg><span>Download all clean</span></button>
+                  <p class="side-note" id="dl-all-note" hidden></p>
                 </div>
                 <div class="side-group">
                   <h2 class="side-title">Examples</h2>
@@ -113,9 +115,12 @@
                   </ul>
                 </div>
                 <div class="side-foot">
-                  <p class="side-legend" aria-hidden="true"><span><i class="dot-label"></i>AI label</span><span><i class="dot-private"></i>About you</span><span><i class="dot-none"></i>No marks found</span></p>
-                  <button class="btn btn-secondary btn-sm js-choose" type="button"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>Choose images</button>
-                  <p>Or drop several images anywhere on this page.</p>
+                  <p class="side-legend" aria-hidden="true"><span><i class="dot-label"></i>AI label</span><span><i class="dot-private"></i>About you</span><span><i class="dot-none"></i>No marks found</span><span><i class="dot-error"></i>Couldn't read</span></p>
+                  <div class="side-add">
+                    <button class="btn btn-secondary btn-sm js-choose" type="button"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>Choose images</button>
+                    <button class="btn btn-secondary btn-sm js-paste" type="button"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Paste text</button>
+                  </div>
+                  <p><span class="if-fine">Or drop images, or press <span class="js-paste-key">Ctrl+V</span> to read text, anywhere on this page.</span><span class="if-touch">Or drop images anywhere on this page.</span></p>
                 </div>
               </aside>
               <div class="win-main" id="r-main">
@@ -256,7 +261,7 @@
             <div class="bar cl-bar" id="cl-bar-b"></div>
             <p class="cl-label"><span>Clean copy</span><span class="cl-size" id="cl-size-b"></span></p>
           </div>
-          <p class="cl-note" id="cl-note"></p>
+          <div class="cl-note" id="cl-note"></div>
         </div>
       </div>
         </div>
@@ -367,21 +372,35 @@
       <p class="foot-offline">Load it once, turn Wi‑Fi off, and it still reads your files.</p>
     </div>
     <nav class="foot-links" aria-label="Footer">
-      <a href="#labels">AI labels</a>
-      <a href="#hidden">Hidden characters</a>
-      <a href="#clean">Clean copy</a>
-      <a href="#privacy">Privacy</a>
-      <a href="#reader">This page</a>
-      <a href="#cli">Command line and agent skill</a>
-      <a href="https://github.com/candygoogy/tellall">Repository on GitHub</a>
-      <a href="https://github.com/candygoogy/tellall/blob/main/LICENSE">MIT licence</a>
-      <a href="/third-party-licenses.txt">Third-party licences</a>
-      <a href="https://photo.candygoogy.dev">Just a camera photo? Photo check is simpler</a>
+      <div class="fl-group">
+        <p class="fl-head" id="fl-read">Read</p>
+        <ul aria-labelledby="fl-read">
+          <li><a href="#labels">AI labels</a></li>
+          <li><a href="#hidden">Hidden characters</a></li>
+          <li><a href="#clean">Clean copy</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+        </ul>
+      </div>
+      <div class="fl-group fl-use">
+        <p class="fl-head" id="fl-use">Use</p>
+        <ul aria-labelledby="fl-use">
+          <li><a href="#reader">This page</a></li>
+          <li><a href="#cli">Command line and agent skill</a></li>
+          <li><a href="https://photo.candygoogy.dev">Photo check, for camera photos</a></li>
+        </ul>
+      </div>
+      <div class="fl-group">
+        <p class="fl-head" id="fl-project">Project</p>
+        <ul aria-labelledby="fl-project">
+          <li><a href="https://github.com/candygoogy/tellall">Repository on GitHub</a></li>
+          <li><a href="https://github.com/candygoogy/tellall/blob/main/LICENSE">MIT licence</a></li>
+          <li><a href="/third-party-licenses.txt">Third-party licences</a></li>
+        </ul>
+      </div>
     </nav>
-    <!-- examples:footdump -->
     <div class="foot-base">
-      <span><a href="https://candygoogy.dev">made by candygoogy</a></span>
-      <span>Fonts: Inter, Martian Grotesk and Martian Mono, all under the SIL Open Font License</span>
+      <!-- examples:footdump -->
+      <p class="foot-sign"><a href="https://candygoogy.dev">made by candygoogy</a><span>Fonts: Inter, Martian Grotesk, Martian Mono (SIL OFL)</span></p>
     </div>
   </div>
 </footer>

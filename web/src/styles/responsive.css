@@ -16,11 +16,13 @@
   .side { flex-direction: row; flex-wrap: nowrap; gap: 14px; padding: 10px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--hair-2); scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
   .side::-webkit-scrollbar { display: none; }
   .side-group, .side-foot { flex: none; }
-  .side-title, .side-foot p, .side-legend { display: none; }
+  .side-title, .side-foot p, .side-legend, .side-note { display: none; }
   .side-list { display: flex; flex-wrap: nowrap; gap: 6px; }
   .file-item { width: auto; grid-template-columns: 24px auto auto; gap: 8px; padding: 6px 10px 6px 6px; min-height: 44px; border-color: var(--hair-2); }
   .fi-thumb { width: 24px; height: 24px; }
-  .side-foot { margin: 0; padding: 0; align-self: center; }
+  /* the way to add more leads the strip, where it's never scrolled away */
+  .side-foot { order: -1; position: static; margin: 0; padding: 0; align-self: center; background: none; border: 0; }
+  .side-add { flex-wrap: nowrap; }
   .side-foot .btn { height: 44px; }
   .side-all { margin: 0 0 0 6px; height: 44px; }
   #side-live { display: flex; align-items: center; }
@@ -35,7 +37,8 @@
   .hint { max-width: none; }
   .hint code { overflow-wrap: anywhere; }
   .rv-text-body { padding: 18px 16px 0; }
-  .tx { max-height: 320px; }
+  .tx, .is-edit .tx { max-height: 320px; }
+  .is-draft .tx-input { height: 180px; }
 }
 @media (max-width: 599px) { .tl-tick-label:not(.is-first):not(.is-last) { display: none; } }
 @media (max-width: 479px) {
@@ -59,6 +62,7 @@
   *, *::before, *::after { scroll-behavior: auto !important; }
   .btn:active, .icon-btn:active { transform: none; }
   .in-view .blk, .caret, .dot-reading, .win-status.is-reading .sdot, .foot-dump.in-view i.cur { animation: none; }
+  .foot-dump i.cur { background: transparent; color: var(--ink); }
   .switch-thumb { transition: background-color 120ms linear; }
   .all::details-content { transition: none; }
 }

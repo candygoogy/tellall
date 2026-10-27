@@ -3,7 +3,8 @@
 // agent skill's JSON. The lines are the engine's report, printed the way
 // the CLI prints it.
 import examples from "virtual:examples";
-import { $, $$, copyText, esc, tabs } from "../dom.ts";
+import { $, $$, esc, tabs } from "../dom.ts";
+import { copyWith, setRest } from "../feedback.ts";
 import { FADE, G, ScrollTrigger, fadeIn, motion } from "../motion.ts";
 
 const CLI_CMD = `npx tellall ${examples.files.chatgpt.name}`;
@@ -76,9 +77,7 @@ function render(animate: boolean): void {
   const cmdEl = $(".t-cmd", body);
   const caret = $(".caret", body);
   const out = $$(".t-line", body);
-  $("#term-copy span").textContent = isCli
-    ? "Copy command"
-    : "Copy install command";
+  setRest($("#term-copy"), isCli ? "Copy command" : "Copy install command");
   if (!animate || !motion()) {
     cmdEl.textContent = cmd;
     caret.remove();
@@ -110,12 +109,14 @@ export function initTerm(): void {
     render(true);
   });
   render(false);
-  $("#term-copy").addEventListener("click", async () => {
-    const ok = await copyText(termKey === "cli" ? CLI_CMD : AGENT_CMD);
-    const s = $("#term-copy span");
-    const was = s.textContent;
-    s.textContent = ok ? "Copied" : "Copy failed";
-    setTimeout(() => (s.textContent = was), 1600);
+  const copy = $("#term-copy");
+  copy.addEventListener("click", () => {
+    const cli = termKey === "cli";
+    void copyWith(
+      copy,
+      cli ? CLI_CMD : AGENT_CMD,
+      cli ? "Copied the command." : "Copied the install command.",
+    );
   });
 }
 

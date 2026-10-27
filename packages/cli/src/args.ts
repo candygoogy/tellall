@@ -20,7 +20,18 @@ export type Args =
       force: boolean;
     };
 
-export const USAGE = `Usage:
+export const SUMMARY =
+  "Shows what an image or a text tells about you, and writes clean copies without it.";
+
+/** The one line shown after a usage error. */
+export const USAGE_LINE =
+  "Usage: tellall [options] [--] <file|dir|-> ...   or   tellall clean [options] [--] <file|dir> ...";
+export const USAGE_LINE_CLEAN =
+  "Usage: tellall clean [options] [--] <file|dir> ...";
+
+export const USAGE = `${SUMMARY}
+
+Usage:
   tellall [options] [--] <file|dir|-> ...
     Plain-sentence report; "-" reads text from stdin.
     --json                       machine-readable reports
@@ -34,6 +45,11 @@ export const USAGE = `Usage:
   tellall -h, --help             this text
   tellall -v, --version          the version number
 
+Examples:
+  tellall -- photo.jpg                   what does this file tell about you?
+  tellall clean -- holiday-photos        write clean copies of a folder's images
+  tellall --fail-on private -- public   in CI: exit 1 if an image has personal data
+
 Put -- before the paths so a name starting with "-" isn't read as an option.
 Folders are read all the way down, except links, node_modules and folders
 whose names start with a dot; tellall says how many it skipped.
@@ -44,7 +60,43 @@ when clean can't make a copy (a damaged file, or a copy already there without
 the exit code.
 `;
 
-export class UsageError extends Error {}
+export class UsageError extends Error {
+  /** Whether the slip was in a `clean` command. */
+  cleaning = false;
+}
+
+/** Edit distance between two short strings. */
+function distance(a: string, b: string): number {
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) {
+      next[j] = Math.min(
+        (next[j - 1] as number) + 1,
+        (row[j] as number) + 1,
+        (row[j - 1] as number) + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    row = next;
+  }
+  return row[b.length] as number;
+}
+
+/** The known flag nearest to `flag`, if it is within 2 edits. */
+function nearest(flag: string, known: readonly string[]): string | null {
+  if (flag.length < 3) return null;
+  let best: string | null = null;
+  let bestDistance = 3;
+  for (const k of known) {
+    if (k.length < 3) continue;
+    const d = distance(flag, k);
+    if (d < bestDistance) {
+      best = k;
+      bestDistance = d;
+    }
+  }
+  return best;
+}
 
 const FAIL_ON: readonly string[] = ["private", "label", "any"];
 const INSPECT_FLAGS: readonly string[] = ["--json", "--all", "--fail-on"];
@@ -57,6 +109,16 @@ const CLEAN_FLAGS: readonly string[] = [
 
 /** The arguments after `node tellall.js`. Throws UsageError. */
 export function parseArgs(argv: string[]): Args {
+  const cleaning = argv[0] === "clean";
+  try {
+    return parse(argv);
+  } catch (e) {
+    if (e instanceof UsageError) e.cleaning = cleaning;
+    throw e;
+  }
+}
+
+function parse(argv: string[]): Args {
   const rest = [...argv];
   const cleaning = rest[0] === "clean";
   if (cleaning) rest.shift();
@@ -105,10 +167,17 @@ export function parseArgs(argv: string[]): Args {
     if (flag === "-v" || flag === "--version") return { command: "version" };
     if (!(cleaning ? CLEAN_FLAGS : INSPECT_FLAGS).includes(flag)) {
       const other = cleaning ? INSPECT_FLAGS : CLEAN_FLAGS;
+      const near = nearest(flag, [
+        ...(cleaning ? CLEAN_FLAGS : INSPECT_FLAGS),
+        "--help",
+        "--version",
+      ]);
       throw new UsageError(
         other.includes(flag)
-          ? `${flag} goes with "tellall${cleaning ? "" : " clean"}".`
-          : `Unknown option: ${flag}`,
+          ? cleaning
+            ? `${flag} is for reports, not for clean.`
+            : `${flag} is only for tellall clean.`
+          : `unknown option ${flag}${near ? `; did you mean ${near}?` : "."}`,
       );
     }
     if (flag === "--fail-on") {
@@ -128,8 +197,8 @@ export function parseArgs(argv: string[]): Args {
   if (!paths.length) {
     throw new UsageError(
       cleaning
-        ? "Name a file or folder to clean."
-        : "Name a file, folder or -.",
+        ? "name a file or folder to clean."
+        : "name a file, folder or -.",
     );
   }
   if (cleaning) {

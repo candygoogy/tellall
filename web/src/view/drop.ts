@@ -2,8 +2,9 @@
 // images pasted. Each file gets its own row in "Your files" and is read
 // in the engine's worker, one after another; up to 200 at once. Several
 // clean copies download together as one zip.
-import { $, $$, cleanName, download, maybe } from "../dom.ts";
+import { $, $$, cleanName, download, fmt, maybe } from "../dom.ts";
 import { read, STALE } from "../engine.ts";
+import { announce, flash, saved } from "../feedback.ts";
 import { zip } from "../zip.ts";
 import {
   bringReaderIntoView,
@@ -65,11 +66,13 @@ export async function readFiles(files: FileList | File[]): Promise<void> {
     file: f,
     state: "reading",
   }));
-  live.unshift(...items.slice().reverse());
+  // Newest batch first, each in the order it was chosen.
+  live.unshift(...items);
   prune(MOST);
   renderLiveList();
   const first = items[0];
   if (first) {
+    first.focusOnRead = true;
     first.thumbUrl = await thumbnail(first.file as File);
     show(first, "swap");
   }
@@ -130,6 +133,9 @@ export function initDrop(): void {
   const drop = $("#drop");
   const mini = maybe("#mini-drop");
   if (mini) {
+    // The closing section's drop box opens the picker too (a pointer's
+    // shortcut: its Choose images button is beside it for the keyboard).
+    mini.addEventListener("click", () => input.click());
     mini.addEventListener("dragenter", () => mini.classList.add("is-over"));
     mini.addEventListener("dragleave", (e) => {
       if (!mini.contains(e.relatedTarget as Node | null))
@@ -165,27 +171,55 @@ export function initDrop(): void {
     void readFiles(e.dataTransfer.files);
   });
 
-  // Every clean copy, as one zip.
+  // Every clean copy, as one zip; the line under it says what's in it
+  // and which files aren't.
   const all = $<HTMLButtonElement>("#dl-all");
+  const line = $("#dl-all-note");
   all.addEventListener("click", async () => {
     all.disabled = true;
-    const label = $("span", all);
     try {
-      const entries = live.flatMap((x) =>
-        x.kind === "file" && x.state === "done" && x.cleanBlob
-          ? [{ name: cleanName(x.name), blob: x.cleanBlob }]
-          : [],
-      );
+      const files = live.filter((x) => x.kind === "file");
+      const inZip = files.filter((x) => x.state === "done" && x.cleanBlob);
+      const entries = inZip.map((x) => ({
+        name: cleanName(x.name),
+        blob: x.cleanBlob as Blob,
+      }));
       download(await zip(entries), "tellall-clean.zip");
+      saved(
+        all,
+        zipLine(
+          entries.length,
+          files.filter((x) => !inZip.includes(x)),
+        ),
+        line,
+      );
     } catch {
-      // Said where the button is, and to a screen reader.
-      const said = "Couldn't make the zip";
-      label.textContent = said;
-      $("#r-live").textContent =
-        `${said}. Download the clean copies one by one instead.`;
-      setTimeout(() => (label.textContent = "Download all clean"), 2400);
+      flash(all, false, "Couldn't make the zip");
+      line.textContent =
+        "Couldn't make the zip. Download the clean copies one by one instead.";
+      line.hidden = false;
+      announce(line.textContent);
     } finally {
       all.disabled = false;
     }
   });
+}
+
+/** "Saved tellall-clean.zip: 9 clean copies. Left out, with no clean
+ * copy: anim.gif." Up to three names each, then how many more. */
+function zipLine(n: number, out: Item[]): string {
+  const names = (xs: Item[]) => {
+    const said = xs.slice(0, 3).map((x) => x.name);
+    if (xs.length > 3) said.push(`${fmt(xs.length - 3)} more`);
+    return said.join(", ");
+  };
+  const reading = out.filter((x) => x.state === "reading");
+  const none = out.filter((x) => x.state !== "reading");
+  return [
+    `Saved tellall-clean.zip: ${fmt(n)} clean ${n === 1 ? "copy" : "copies"}.`,
+    none.length ? `Left out, with no clean copy: ${names(none)}.` : "",
+    reading.length ? `Still being read: ${names(reading)}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }

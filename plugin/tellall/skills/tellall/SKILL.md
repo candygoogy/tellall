@@ -31,7 +31,7 @@ For text the user pasted, save it to a file and pass it on stdin: `npx -y tellal
 - Say what the file says, not what it is: "This image says it was made by AI", never "this image is AI" or "this is not AI".
 - Never call a file real, fake, verified, trusted or authentic. "The signature matches this file" means the file hasn't changed since it was signed. tellall doesn't check who stands behind the certificate.
 - An empty result means no marks were found. It says nothing about who or what made the file: many apps and sites strip marks.
-- Pixel watermarks (SynthID and others): report only what the label states. tellall can't see them or remove them, and a clean copy keeps them.
+- Pixel watermarks (SynthID and others): report only what the label states. tellall names the watermark only when the label does; don't add a name it didn't say. tellall can't see them or remove them, and a clean copy keeps them. To check for one, the user can upload the file to the maker's own checker: Google's SynthID Detector at https://synthid.com/ (needs sign-in) or OpenAI's at https://openai.com/verify. Suggest it only when asked; that upload leaves the device.
 - `harmless` findings (emoji joiners and keycaps, flags, variation selectors, the joiners Persian or Hindi need) aren't a problem; don't present them as one.
 - Mention C2PA, XMP, IPTC or the raw `fields` only when the user asks for detail.
 

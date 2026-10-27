@@ -1,12 +1,13 @@
 // The hero: the dump of chatgpt-image.png's first bytes (written into
-// index.html at build time from the fixture), whose cursor walks the PNG
+// index.html at build time from the fixture), whose cursor glides the PNG
 // header to the byte where the C2PA label starts; and the tilted reader
 // window, which flattens as the page scrolls and leans toward the pointer.
 import { $, $$, maybe } from "../dom.ts";
-import { G, TICK, decode, fineMQ, motion, still } from "../motion.ts";
+import { G, decode, fineMQ, motion, still } from "../motion.ts";
 
-/** The cursor walks the header a row at a time to the label's first byte,
- * then the label's rows light up and the cursor rests there. */
+/** The cursor glides down the header a row at a time to the label's
+ * first byte, each move a short ease from cell to cell; then the label's
+ * rows light up and the cursor rests there. */
 export function walkDump(): void {
   const dump = maybe("#hexdump");
   if (!dump) return;
@@ -22,44 +23,70 @@ export function walkDump(): void {
     cells.forEach((c) => c.classList.remove("cur"));
     cells[at]?.classList.add("cur", "is-rest");
   };
+  const firstLit = Math.floor(at / 8);
   if (!motion()) {
     for (let i = 0; i <= at; i++) seen(i);
-    rows.slice(Math.floor(at / 8)).forEach((r) => r.classList.add("is-on"));
+    rows.slice(firstLit).forEach((r) => r.classList.add("is-on"));
     rest();
     return;
   }
   const stops = [
-    ...Array.from({ length: Math.floor(at / 8) + 1 }, (_, k) => k * 8).filter(
+    ...Array.from({ length: firstLit + 1 }, (_, k) => k * 8).filter(
       (s) => s < at,
     ),
     at,
   ];
-  let k = 0;
-  let prev = -1;
-  const walk = () => {
-    if (prev >= 0) cells[prev]?.classList.remove("cur");
-    const stop = stops[k++];
-    if (stop !== undefined) {
-      for (let j = Math.max(0, prev + 1); j <= stop; j++) seen(j);
-      cells[stop]?.classList.add("cur");
-      prev = stop;
-      setTimeout(walk, TICK * 1000);
-      return;
-    }
-    rest();
-    let r = Math.floor(at / 8);
-    const light = () => {
-      const row = rows[r++];
-      if (!row) {
-        decode(maybe(".hd-note", dump), 0.4);
-        return;
-      }
-      row.classList.add("is-on");
-      setTimeout(light, TICK * 1000);
-    };
-    light();
+  // The moving cursor is one block under the bytes, carried by transforms;
+  // a cell that's hidden (narrow screens show only the rows near the label)
+  // is passed without a stop.
+  const where = (i: number) => {
+    const c = cells[i];
+    return c?.offsetParent === dump
+      ? { x: c.offsetLeft, y: c.offsetTop }
+      : null;
   };
-  walk();
+  const block = document.createElement("span");
+  block.className = "hd-glide";
+  const size = cells[at];
+  if (size) {
+    block.style.width = size.offsetWidth + "px";
+    block.style.height = size.offsetHeight + "px";
+  }
+  dump.appendChild(block);
+  dump.classList.add("is-walk");
+  const tl = G.timeline({
+    onComplete: () => {
+      block.remove();
+      dump.classList.remove("is-walk");
+    },
+  });
+  let prev = -1;
+  let shown = false;
+  for (const stop of stops) {
+    const p = where(stop);
+    if (p && !shown) {
+      tl.set(block, { x: p.x, y: p.y }).to(block, {
+        opacity: 1,
+        duration: 0.08,
+        ease: "none",
+      });
+      shown = true;
+    } else if (p) {
+      tl.to(block, { x: p.x, y: p.y, duration: 0.11, ease: "power2.inOut" });
+    }
+    const from = prev;
+    tl.call(() => {
+      for (let j = from + 1; j <= stop; j++) seen(j);
+    });
+    prev = stop;
+  }
+  // The block hands over to the label's own cell, which blinks and rests.
+  tl.call(rest).set(block, { opacity: 0 });
+  rows.slice(firstLit).forEach((row, i) => {
+    tl.call(() => row.classList.add("is-on"), [], i ? "+=0.07" : ">");
+  });
+  tl.call(() => decode(maybe(".hd-note", dump), 0.4), [], "+=0.07");
+  tl.to({}, { duration: 0.25 });
 }
 
 /** The window flattens over the first 600 px of scroll; on a fine pointer
@@ -79,7 +106,7 @@ export function initTilt(): void {
         {
           rotateX: 6,
           scale: 1,
-          ease: "steps(7)",
+          ease: "none",
           scrollTrigger: { start: 0, end: 600, scrub: 0.6 },
         },
       );

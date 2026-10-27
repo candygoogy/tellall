@@ -1,5 +1,6 @@
 // Reading inputs and writing clean copies: a file's first bytes before
 // the rest, and a copy that appears whole or not at all.
+import { detect } from "@tellall/engine";
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -19,43 +20,6 @@ import { basename, dirname, join } from "node:path";
 const HEAD = 64 * 1024;
 /** As much as Node reads into one buffer with readFile. */
 const MAX = 2 ** 31 - 1;
-
-const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-const HEVC_BRANDS = new Set(["heic", "heix", "heim", "heis", "hevc", "hevx"]);
-const AVIF_BRANDS = new Set(["avif", "avis"]);
-const HEIF_BRANDS = new Set(["mif1", "msf1"]);
-
-const ascii = (b: Uint8Array, from: number, to: number) =>
-  String.fromCharCode(...b.subarray(from, to));
-
-/** Whether the engine may read a file that starts with these bytes. The
- * engine's own check (packages/engine/src/image/detect.ts) isn't exported,
- * so this is a copy of it: keep the two in step. If they drift, nothing
- * goes wrong but time: a file this calls unknown and the engine doesn't is
- * read again in full (see `Input.whole`). */
-export function mayRead(b: Uint8Array): boolean {
-  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
-    return true;
-  }
-  if (b.length >= 8 && PNG.every((v, i) => b[i] === v)) return true;
-  if (b.length >= 12 && ascii(b, 0, 4) === "RIFF" && ascii(b, 8, 12) === "WEBP")
-    return true;
-  if (b.length >= 16 && ascii(b, 4, 8) === "ftyp") {
-    const major = ascii(b, 8, 12);
-    if (AVIF_BRANDS.has(major)) return false;
-    const end = Math.min(
-      b.length,
-      new DataView(b.buffer, b.byteOffset).getUint32(0),
-    );
-    const brands = [major];
-    for (let o = 16; o + 4 <= end; o += 4) brands.push(ascii(b, o, o + 4));
-    const any = (set: Set<string>) => brands.some((brand) => set.has(brand));
-    if (any(HEVC_BRANDS)) return true;
-    if (any(AVIF_BRANDS)) return false;
-    if (any(HEIF_BRANDS)) return true;
-  }
-  return false;
-}
 
 /** An error whose message is already a sentence for the user. */
 export class Said extends Error {}
@@ -93,12 +57,13 @@ export function readInput(path: string, whole = false): Input {
     if (!whole && stat.size > HEAD) {
       const head = new Uint8Array(HEAD);
       const got = readUpTo(fd, head, 0);
-      if (!mayRead(head.subarray(0, got))) {
+      // The engine's own check of what it reads.
+      if (!detect(head.subarray(0, got))) {
         return { bytes: head.subarray(0, got), whole: false };
       }
     }
     if (stat.size > MAX) {
-      throw new Said("it's larger than 2 GiB, more than tellall can read");
+      throw new Said("it's larger than 2 GiB, more than can be read");
     }
     // One buffer of the file's size, read straight into: no copy.
     const all = new Uint8Array(Buffer.allocUnsafeSlow(stat.size).buffer);

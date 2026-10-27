@@ -1,6 +1,11 @@
 // Every sentence in words/en.ts, called with sample data: none may say
 // real, fake, verified, trusted or authentic (spec §2, §5.4).
 import { expect, test } from "vitest";
+import {
+  MAKER_CHECKERS,
+  SYNTHID_DETECTOR,
+  watermarkCheckers,
+} from "../src/words/checkers.ts";
 import { en, type Moment } from "../src/words/en.ts";
 
 const BANNED = /\b(real|fake|verified|trusted|authentic)\b/i;
@@ -39,8 +44,10 @@ const SAMPLES: Record<string, unknown[][]> = {
     ["Created by Google Generative AI.", when],
     ["Made by a tool", null],
   ],
-  "label.watermark": [["OpenAI"], [null]],
-  "label.holds": [["It names the camera: Example Cam 1. It names the lens: X."]],
+  "label.watermark": [["OpenAI"], [null], ["Google", "SynthID"]],
+  "label.holds": [
+    ["It names the camera: Example Cam 1. It names the lens: X."],
+  ],
   source: [
     ["trainedAlgorithmicMedia"],
     ["compositeWithTrainedAlgorithmicMedia"],
@@ -175,6 +182,9 @@ test("exact copy from the plan's Global Constraints", () => {
   expect(en.label.watermark("OpenAI")).toBe(
     "The label says OpenAI also put an invisible watermark in the pixels. A clean copy can't remove it.",
   );
+  expect(en.label.watermark("Google", "SynthID")).toBe(
+    "The label says Google also put an invisible watermark, SynthID, in the pixels. A clean copy can't remove it, and it's made to survive common edits such as screenshots, resizing and re-saving.",
+  );
   expect(en.label.webp).toBe(
     "This image carries an AI label (details can't be read for WebP yet).",
   );
@@ -194,4 +204,28 @@ test("exact copy from the plan's Global Constraints", () => {
   expect(en.copy.styling(0, 1)).toBe(
     "The copy carries the page's own styling (1 inline style), which can hint at the site it came from.",
   );
+});
+
+// The page's links under a watermark sentence (words/checkers.ts).
+test("checker links: SynthID's only when named, a maker's only when it signed", () => {
+  for (const c of [SYNTHID_DETECTOR, ...Object.values(MAKER_CHECKERS)]) {
+    expect(c.text).not.toMatch(BANNED);
+    expect(c.url).toMatch(/^https:\/\//);
+  }
+  const openai = MAKER_CHECKERS["OpenAI"];
+  expect(watermarkCheckers(en.label.watermark("Google", "SynthID"))).toEqual([
+    SYNTHID_DETECTOR,
+  ]);
+  expect(watermarkCheckers(en.label.watermark("OpenAI"))).toEqual([openai]);
+  expect(watermarkCheckers(en.label.watermark("OpenAI", "SynthID"))).toEqual([
+    SYNTHID_DETECTOR,
+    openai,
+  ]);
+  expect(watermarkCheckers(en.label.watermark("Google"))).toEqual([]);
+  expect(watermarkCheckers(en.label.watermark(null))).toEqual([]);
+  expect(watermarkCheckers(en.label.signed("OpenAI OpCo, LLC", true))).toEqual(
+    [],
+  );
+  // A maker name that is an Object key isn't a checker.
+  expect(watermarkCheckers(en.label.watermark("constructor"))).toEqual([]);
 });

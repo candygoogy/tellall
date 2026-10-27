@@ -10,7 +10,7 @@
 .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 /* the hero dump: the first 144 bytes of chatgpt-image.png, read from the fixture. Decorative (aria-hidden),
-   but every glyph still clears 4.5:1. The cursor walks to byte 33 (0x21), where the C2PA label starts. */
+   but every glyph still clears 4.5:1. The cursor glides to byte 33 (0x21), where the C2PA label starts. */
 .hexdump { position: absolute; right: var(--gutter); top: -4px; z-index: 0; display: flex; flex-direction: column; font: 400 var(--t-data)/1.5 var(--data); font-stretch: 87.5%; font-variant-numeric: tabular-nums; color: var(--dump); white-space: pre; pointer-events: none; user-select: none; }
 .hexdump i { font-style: normal; }
 .hd-cap { color: var(--ink-3); }
@@ -24,6 +24,9 @@
 .hd-row.is-on .is-label { color: var(--label); }
 .hd-row.is-on .hd-hex .is-label { background: rgb(var(--label-rgb) / 0.16); }
 .hexdump i.cur, .hexdump .hd-row.is-on .hd-hex i.cur { background: var(--cursor); color: var(--bg); }
+/* while the cursor walks (hero.ts walkDump): one block glides under the bytes, and what it passes eases in */
+.hd-glide { position: absolute; left: 0; top: 0; z-index: -1; background: var(--cursor); opacity: 0; will-change: transform; }
+.hexdump.is-walk i:not(.cur) { transition: color 0.2s ease-out, background-color 0.2s ease-out; }
 .hd-cap-narrow { display: none; }
 @media (min-width: 1024px) and (max-width: 1279px) {
   .hd-asc { display: none; }
@@ -31,7 +34,7 @@
 }
 @media (max-width: 1023px) {
   /* narrower: four rows in the flow, the ones where the label begins */
-  .hexdump { position: static; margin-top: 32px; }
+  .hexdump { position: relative; inset: auto; margin-top: 32px; }
   .hd-row:not(.hd-near) { display: none; }
   .hd-note { order: 9; margin: 4px 0 0; }
   .hd-cap-wide { display: none; }

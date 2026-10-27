@@ -6,27 +6,26 @@
 // index.html when the page arrives.
 import type { Report } from "@tellall/engine";
 import examples from "virtual:examples";
-import {
-  $,
-  $$,
-  cleanName,
-  copyText,
-  esc,
-  flashIcon,
-  fmt,
-  b64,
-  download,
-  maybe,
-} from "../dom.ts";
+import { $, $$, cleanName, esc, fmt, b64, download, maybe } from "../dom.ts";
 import { read } from "../engine.ts";
+import {
+  announce as say,
+  copiedChars,
+  copyWith,
+  saved,
+  savedLine,
+} from "../feedback.ts";
 import {
   EASE,
   FADE,
+  FILL,
   G,
-  STEP,
-  TICK,
+  POP,
+  TRAVEL,
   fadeIn,
+  lightChips,
   motion,
+  reduceMQ,
   swap,
   typeTitle,
 } from "../motion.ts";
@@ -40,7 +39,9 @@ import {
   wireHits,
 } from "./anatomy.ts";
 import {
+  CANT_READ,
   POINT_TEXT,
+  dotFor,
   exampleItem,
   fileViewHTML,
   findingsHTML,
@@ -52,10 +53,28 @@ import {
 } from "./reader-html.ts";
 import { chipClass, renderChips } from "./text.ts";
 
-export { hintHTML, type Item } from "./reader-html.ts";
+export { hintBlockHTML, hintHTML, type Item } from "./reader-html.ts";
 
-const NOTE =
-  "Formatted copies can carry the page's address into apps like Word and OneNote; Copy clean text copies plain text only.";
+/** Under a text: what Copy clean text leaves behind, unless a finding
+ * beside it already says the copy carries the page's address. */
+export function textNoteHTML(r: Report | undefined): string {
+  const address = r?.findings.some((f) =>
+    f.fields.some((x) => x.name === "SourceURL"),
+  );
+  return address
+    ? ""
+    : `<span><em>Copy clean text</em> copies plain text only, without the page's address or styling.</span>`;
+}
+
+/** A text's actions: Copy clean text, New text, what the copy did. */
+export function textActionsHTML(r: Report | undefined): string {
+  return `<div class="rv-actions">
+        <button class="btn btn-primary btn-sm js-copy-clean" type="button"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy clean text</span></button>
+        <button class="btn btn-secondary btn-sm js-new-text" type="button"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg><span>New text</span></button>
+        <p class="rv-note js-copy-status" aria-live="polite"></p>
+        <p class="hint js-text-note">${textNoteHTML(r)}</p>
+      </div>`;
+}
 
 export const EX: Record<string, Item> = {
   ...Object.fromEntries(
@@ -80,10 +99,17 @@ export let current: Item = FIRST;
 let readingTL: gsap.core.Timeline | null = null;
 let pinned: number | null = null;
 
-/** The paste view (paste.ts) draws into the window through this. */
-let pasteView: ((view: HTMLElement) => void) | null = null;
-export const onPasteView = (draw: (view: HTMLElement) => void) => {
-  pasteView = draw;
+/** The visitor's own texts are drawn by paste.ts (an editable box that's
+ * read as it changes) through this. */
+let textView: ((view: HTMLElement, item: Item) => void) | null = null;
+export const onTextView = (draw: (view: HTMLElement, item: Item) => void) => {
+  textView = draw;
+};
+/** What the view on screen does before `next` takes its place (the text
+ * box reads what's still waiting). */
+let leaving: ((next: Item) => void) | null = null;
+export const onLeave = (fn: (next: Item) => void) => {
+  leaving = fn;
 };
 
 function textViewHTML(item: Item): string {
@@ -97,25 +123,25 @@ function textViewHTML(item: Item): string {
         </div>
         <div class="rv-report rv-report-text"><ul class="rv-findings">${findingsHTML(r)}</ul></div>
       </div>
-      <div class="rv-actions">
-        <button class="btn btn-primary btn-sm js-copy-clean" type="button"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy clean text</span></button>
-        <p class="rv-note js-copy-status" aria-live="polite"></p>
-        <p class="hint">${NOTE}</p>
-      </div>`;
+      ${textActionsHTML(r)}`;
 }
 function readingViewHTML(item: Item): string {
-  if (item.kind === "text") {
-    return `<div class="rv-text-body"><div class="rv-report"><p class="rv-status">Reading the pasted text on this device…</p></div></div>`;
-  }
   return `<div class="rv-top"><div>${plateHTML(item)}<p class="rv-cap">${esc(fmt(item.size ?? 0))} bytes</p></div>
       <div class="rv-report"><p class="rv-status">Reading ${esc(item.name)} on this device…</p></div></div>`;
 }
 function errorViewHTML(item: Item): string {
-  const file = item.kind === "file";
-  return `<div class="rv-top">${file ? `<div>${plateHTML(item)}</div>` : ""}<div class="rv-report">
-      <h2 class="rv-headline is-empty" tabindex="-1">tellall couldn't read this ${file ? "file" : "text"}.</h2>
+  return `<div class="rv-top"><div>${plateHTML(item)}</div><div class="rv-report">
+      <h2 class="rv-headline is-empty" tabindex="-1">tellall couldn't read this file.</h2>
       <p class="rv-note rv-err"></p>
-      ${file ? `<div class="hero-actions"><button class="btn btn-secondary btn-sm js-choose" type="button">Choose another image</button></div>` : ""}</div></div>`;
+      <div class="hero-actions"><button class="btn btn-secondary btn-sm js-choose" type="button">Choose another image</button></div></div></div>`;
+}
+/** A file of a kind tellall doesn't read (a GIF, a text file): no picture
+ * and no file to scale, only what it does read. */
+function unreadableViewHTML(item: Item): string {
+  return `<div class="rv-top is-solo"><div class="rv-report">
+      <h2 class="rv-headline is-empty" tabindex="-1">${esc(item.report?.headline ?? "")}</h2>
+      <p class="rv-note rv-err">tellall reads JPEG, PNG, WebP and HEIC images, and text you paste.</p>
+      <div class="hero-actions"><button class="btn btn-secondary btn-sm js-choose" type="button">Choose another image</button></div></div></div>`;
 }
 
 function wireFileView(item: Item): void {
@@ -275,18 +301,30 @@ function wireFileView(item: Item): void {
 
 function wireActions(item: Item): void {
   const v = view();
-  const hintBtn = maybe(".js-copy-hint", v);
-  hintBtn?.addEventListener("click", async () => {
-    const ok = item.command ? await copyText(item.command) : false;
-    flashIcon(hintBtn, ok);
+  wireHint(v, item.command);
+  const line = maybe(".js-dl-status", v);
+  // The visitor's own clean copy: the link downloads it; this says so.
+  const dl = maybe(".js-dl", v);
+  dl?.addEventListener("click", () => {
+    if (!item.cleanBlob) return;
+    saved(
+      dl,
+      savedLine(
+        cleanName(item.name),
+        item.size ?? 0,
+        item.cleanBlob.size,
+        !!item.cleaned?.removed.length,
+      ),
+      line,
+    );
   });
   const exBtn = maybe<HTMLButtonElement>(".js-dl-example", v);
   if (exBtn && item.bytes) {
     const bytes = item.bytes;
     exBtn.addEventListener("click", async () => {
       exBtn.disabled = true;
-      const note = document.createElement("p");
-      note.className = "rv-note";
+      let said: string;
+      let ok = false;
       try {
         const res = await read({
           kind: "file",
@@ -301,66 +339,107 @@ function wireActions(item: Item): void {
             }),
             cleanName(item.name),
           );
-          note.textContent = `Saved ${cleanName(item.name)}: ${fmt(c.output.byteLength)} bytes, ${fmt((item.size ?? 0) - c.output.byteLength)} bytes of personal data removed.`;
-        } else note.textContent = c.notes.join(" ");
+          said = savedLine(
+            cleanName(item.name),
+            item.size ?? 0,
+            c.output.byteLength,
+            c.removed.length > 0,
+          );
+          ok = true;
+        } else said = c.notes.join(" ");
       } catch (err) {
-        note.textContent =
-          "tellall couldn't make the copy: " + (err as Error).message;
+        said = "tellall couldn't make the copy: " + (err as Error).message;
       } finally {
         exBtn.disabled = false;
       }
-      exBtn.parentElement?.querySelector(".rv-note")?.remove();
-      exBtn.after(note);
+      saved(exBtn, said, line, ok);
     });
   }
 }
 
-function wireTextView(item: Item): void {
-  const v = view();
-  const box = $(".tx", v);
-  const mapEl = $(".pmap", v);
+/** The hint's copy button, in the reader and the clean-copy section. */
+export function wireHint(root: ParentNode, command: string | null | undefined) {
+  const btn = maybe(".js-copy-hint", root);
+  if (btn && command)
+    btn.addEventListener(
+      "click",
+      () => void copyWith(btn, command, "Copied the command."),
+    );
+}
+
+/** A text's marked characters and its sentences, each sentence lighting
+ * the characters it's about. Drawn again on each reading of a live text. */
+export function drawTextReport(root: HTMLElement, item: Item): void {
+  const box = $(".tx", root);
   const report = item.report as Report;
-  renderChips(box, mapEl, item.plain ?? "", report);
-  const lightChips = (cls: string | null) => {
+  renderChips(box, $(".pmap", root), item.plain ?? "", report);
+  const list = $(".rv-findings", root);
+  list.innerHTML = findingsHTML(report);
+  const mark = (cls: string | null) => {
     $$(".chip", box).forEach((c) =>
       c.classList.toggle("is-on", !!cls && c.classList.contains(cls)),
     );
   };
-  $$(".finding", v).forEach((fb) => {
+  $$(".finding", list).forEach((fb) => {
     const f = report.findings[Number(fb.dataset["i"])];
     if (!f) return;
     const cls = chipClass(f.kind);
-    fb.addEventListener("pointerenter", () => lightChips(cls));
-    fb.addEventListener("focus", () => lightChips(cls));
-    fb.addEventListener("pointerleave", () => lightChips(null));
-    fb.addEventListener("blur", () => lightChips(null));
-  });
-  const btn = $(".js-copy-clean", v);
-  const status = $(".js-copy-status", v);
-  btn.addEventListener("click", async () => {
-    const out = item.cleaned?.output;
-    const text = item.cleanText ?? (typeof out === "string" ? out : "");
-    const ok = await copyText(text);
-    status.textContent = ok
-      ? `Copied ${fmt([...text].length)} characters as plain text.`
-      : "The browser didn't allow copying. Select the text and copy it instead.";
+    fb.addEventListener("pointerenter", () => mark(cls));
+    fb.addEventListener("focus", () => mark(cls));
+    fb.addEventListener("pointerleave", () => mark(null));
+    fb.addEventListener("blur", () => mark(null));
   });
 }
 
-const statusFor = (item: Item) =>
+/** Copy clean text: copies the text's clean copy at the time of the click. */
+export function wireCopyClean(root: HTMLElement, item: Item): void {
+  const btn = $(".js-copy-clean", root);
+  const status = $(".js-copy-status", root);
+  btn.addEventListener("click", () => {
+    const out = item.cleaned?.output;
+    const text = item.cleanText ?? (typeof out === "string" ? out : "");
+    void copyWith(btn, text, copiedChars(text), status);
+  });
+}
+
+function wireTextView(item: Item): void {
+  const v = view();
+  drawTextReport(v, item);
+  wireCopyClean(v, item);
+}
+
+/** A file of a kind tellall doesn't read: no parts to draw. */
+const unreadable = (item: Item) =>
+  item.kind === "file" && !!item.report && !item.report.anatomy.length;
+
+export const statusFor = (item: Item) =>
   !item.live
     ? "Example result"
-    : item.kind === "file" && item.report && !item.report.anatomy.length
-      ? "Couldn't read on this device"
-      : `Read on this device in ${fmt(Math.max(1, item.ms ?? 0))} ms`;
+    : item.state === "paste"
+      ? "Ready"
+      : item.state === "reading"
+        ? "Reading…"
+        : item.state === "error"
+          ? "Couldn't read"
+          : unreadable(item)
+            ? CANT_READ
+            : `Read on this device in ${fmt(Math.max(1, item.ms ?? 0))} ms`;
 
 export function setStatus(text: string, reading: boolean): void {
   $("#r-status-text").innerHTML = statusHTML(text);
   $("#r-status").classList.toggle("is-reading", reading);
 }
-function setCrumbs(item: Item): void {
+/** The window's title: the group and the name ("New text" alone, as it's
+ * in no list yet). */
+export function setCrumbs(item: Item): void {
+  $(".crumbs").classList.toggle(
+    "is-solo",
+    item.state === "paste" && !live.includes(item),
+  );
   $("#r-group").textContent = item.live ? "Your files" : "Examples";
-  $("#r-name").textContent = item.name;
+  const name = $("#r-name");
+  name.textContent = item.name;
+  name.title = item.title ?? item.name;
 }
 function markCurrent(): void {
   $$(".file-item").forEach((b) =>
@@ -372,27 +451,88 @@ function markCurrent(): void {
     ),
   );
 }
-function announce(item: Item): void {
-  if (item.report)
-    $("#r-live").textContent = `${item.name}: ${item.report.headline}`;
+/** The result is on screen: the headline takes the focus if the visitor
+ * started this reading (and isn't typing somewhere), else the result is
+ * said to a screen reader. */
+export function landed(item: Item): void {
+  if (item.focusOnRead && item.state !== "reading" && item === current) {
+    delete item.focusOnRead;
+    const a = document.activeElement;
+    const typing = !!a?.matches?.(
+      'textarea, select, [contenteditable="true"], input:not([type="file"])',
+    );
+    const head = maybe(".rv-headline", view());
+    if (head && !typing && head.offsetParent) {
+      head.focus({ preventScroll: true });
+      return;
+    }
+  }
+  if (item.report) say(`${item.name}: ${item.report.headline}`);
+}
+
+/** Replay plays a reading again; under reduced motion there's nothing to
+ * replay, and a text box being edited isn't redrawn. */
+function syncReplay(): void {
+  $("#r-replay").hidden =
+    !motion() || (current.live && current.kind === "text");
+}
+
+/** The current row in view inside the sidebar (a column on wide screens,
+ * a swipe row on phones), never scrolling the page. */
+export function revealCurrent(): void {
+  const side = $(".side");
+  const b = maybe(`.file-item[aria-current="true"]`, side);
+  if (!b || !b.offsetParent) return;
+  const pad = 12;
+  let left = side.scrollLeft;
+  let top = side.scrollTop;
+  if (side.scrollWidth > side.clientWidth + 1) {
+    // The strip's right edge fades out: count only what's clear of it.
+    const seen = side.clientWidth * 0.85;
+    if (b.offsetLeft < left + pad) left = b.offsetLeft - pad;
+    else if (b.offsetLeft + b.offsetWidth > left + seen)
+      left = b.offsetLeft + b.offsetWidth - seen + pad;
+  }
+  if (side.scrollHeight > side.clientHeight + 1) {
+    const foot = maybe(".side-foot", side);
+    const seen =
+      side.clientHeight -
+      (foot && getComputedStyle(foot).position === "sticky"
+        ? foot.offsetHeight
+        : 0);
+    if (b.offsetTop < top + pad) top = b.offsetTop - pad;
+    else if (b.offsetTop + b.offsetHeight > top + seen)
+      top = b.offsetTop + b.offsetHeight - seen + pad;
+  }
+  if (left !== side.scrollLeft || top !== side.scrollTop)
+    side.scrollTo({ left, top, behavior: motion() ? "smooth" : "auto" });
 }
 
 export type Mode = "swap" | "intro" | "none";
 
 export function show(item: Item, mode: Mode = "swap"): void {
+  const leave = leaving;
+  leaving = null;
+  leave?.(item);
   current = item;
   pinned = null;
   markCurrent();
   setCrumbs(item);
+  syncReplay();
+  if (mode !== "none") revealCurrent();
   if (readingTL) {
     readingTL.kill();
     readingTL = null;
   }
   const v = view();
   const build = () => {
-    if (item.state === "paste") {
-      pasteView?.(v);
-      setStatus("Ready", false);
+    if (item.live && item.kind === "text") {
+      textView?.(v, item);
+      setStatus(statusFor(item), item.state === "reading");
+      if (item.state === "done") {
+        landed(item);
+        play(mode);
+      }
       return;
     }
     if (item.state === "reading") {
@@ -407,6 +547,13 @@ export function show(item: Item, mode: Mode = "swap"): void {
       setPlateRatio(item);
       $(".rv-note", v).textContent = item.error ?? "";
       setStatus("Couldn't read", false);
+      landed(item);
+      return;
+    }
+    if (unreadable(item)) {
+      v.innerHTML = unreadableViewHTML(item);
+      setStatus(CANT_READ, false);
+      landed(item);
       return;
     }
     if (item.kind === "text") {
@@ -418,7 +565,7 @@ export function show(item: Item, mode: Mode = "swap"): void {
       wireFileView(item);
     }
     setStatus(statusFor(item), false);
-    announce(item);
+    landed(item);
     play(mode);
   };
   if (motion() && mode === "swap" && v.childElementCount) {
@@ -481,19 +628,23 @@ function loopScan(): void {
   const plate = maybe(".rv-plate", v);
   if (!scan || !plate) return;
   readingTL = G.timeline({ repeat: -1 });
-  const n = Math.max(2, Math.round(0.9 / TICK));
+  // The scan block is a row of the picture tall (one of 11) and sweeps
+  // down it.
+  const n = 11;
   G.set(scan, { height: plate.clientHeight / n });
   readingTL
     .fromTo(
       scan,
-      { y: 0, opacity: 1 },
+      { y: 0 },
       {
         y: () => plate.clientHeight - plate.clientHeight / n,
         duration: 0.9,
-        ease: `steps(${n - 1})`,
+        ease: TRAVEL,
       },
+      0,
     )
-    .to(scan, { opacity: 0, duration: 0.01 });
+    .fromTo(scan, { opacity: 0 }, { opacity: 1, ...FADE }, 0)
+    .to(scan, { opacity: 0, ...FADE }, 0.8);
 }
 
 /** The reading: a scan over the picture, the bar fills to scale, the
@@ -518,31 +669,26 @@ export function play(mode: Mode, paused = false): gsap.core.Timeline | null {
   const tx = maybe(".tx", v);
   const item = current;
   if (mode === "intro") setStatus("Reading…", true);
-  // The picture arrives, then the cursor block steps down it row by row.
+  // The picture arrives, then the cursor block sweeps down it.
   if (plate) tl.fromTo(plate, { opacity: 0 }, { opacity: 1, ...FADE }, 0);
   if (scan && plate) {
-    // The scan block is one row of the picture tall and steps down one
-    // row per tick.
-    const rows = Math.max(3, Math.round((1.25 * k) / TICK));
+    // The scan block is one row of the picture tall (a row for every
+    // 85 ms of the sweep, as many as the cursor would read).
+    const rows = Math.max(3, Math.round(15 * k));
     tl.set(scan, { height: () => plate.clientHeight / rows }, 0)
-      .fromTo(
-        scan,
-        { y: 0, opacity: 0 },
-        { opacity: 1, duration: 0.01 },
-        0.15 * k,
-      )
+      .fromTo(scan, { y: 0, opacity: 0 }, { opacity: 1, ...FADE }, 0.15 * k)
       .to(
         scan,
         {
           y: () => plate.clientHeight - plate.clientHeight / rows,
           duration: 1.25 * k,
-          ease: `steps(${rows - 1})`,
+          ease: TRAVEL,
         },
         0.15 * k,
       )
-      .to(scan, { opacity: 0, duration: 0.01 }, ">");
+      .to(scan, { opacity: 0, ...FADE }, ">-0.06");
   }
-  // The file fills to scale in cursor ticks while the byte count runs up.
+  // The file fills to scale while the byte count runs up with it.
   if (main) {
     tl.fromTo(
       main,
@@ -550,7 +696,7 @@ export function play(mode: Mode, paused = false): gsap.core.Timeline | null {
       {
         clipPath: "inset(0 0% 0 0)",
         duration: 1.25 * k,
-        ease: STEP(1.25 * k),
+        ease: FILL,
         clearProps: "clipPath",
       },
       0.2 * k,
@@ -563,7 +709,7 @@ export function play(mode: Mode, paused = false): gsap.core.Timeline | null {
         {
           v: total,
           duration: 1.25 * k,
-          ease: STEP(1.25 * k),
+          ease: FILL,
           onUpdate: () => {
             count.textContent = fmt(o.v);
           },
@@ -578,7 +724,7 @@ export function play(mode: Mode, paused = false): gsap.core.Timeline | null {
       .fromTo(
         $(".an-connect", zoomWrap),
         { scaleY: 0, transformOrigin: "50% 100%" },
-        { scaleY: 1, duration: 0.3 * k, ease: STEP(0.3 * k) },
+        { scaleY: 1, duration: 0.3 * k, ease: FILL },
         0.95 * k,
       )
       .fromTo(
@@ -587,41 +733,28 @@ export function play(mode: Mode, paused = false): gsap.core.Timeline | null {
         {
           scaleX: 1,
           duration: 0.5 * k,
-          ease: STEP(0.5 * k),
+          ease: FILL,
           stagger: 0.08 * k,
         },
         1.0 * k,
       );
   }
   if (tx) tl.fromTo(tx, { opacity: 0 }, { opacity: 1, ...FADE }, 0.1);
-  // Hidden characters are marked one at a time, like the cursor setting
-  // each one down.
-  if (chips.length) {
-    tl.fromTo(
-      chips,
-      { opacity: 0 },
-      {
-        opacity: 1,
-        duration: 0.01,
-        stagger: 0.09 * Math.max(k, 0.5),
-        clearProps: "opacity",
-      },
-      0.5 * k,
-    );
-  }
+  // Hidden characters light up one after another, each a short fade.
+  if (chips.length) tl.add(lightChips(chips, 0.09 * Math.max(k, 0.5)), 0.5 * k);
   if (ticks.length) {
     tl.fromTo(
       ticks,
       { opacity: 0 },
-      { opacity: 1, duration: 0.01, stagger: 0.09 * Math.max(k, 0.5) },
+      { opacity: 1, ...POP, stagger: 0.09 * Math.max(k, 0.5) },
       0.5 * k,
     );
   }
   const at = mode === "intro" ? 1.35 : 0.5;
-  // The engine's headline is set by the cursor, word by word, readable
-  // within half a second.
+  // The engine's headline is uncovered by the cursor, readable within
+  // about half a second.
   if (head) {
-    const t = typeTitle(head, mode === "intro" ? 0.06 : 0.035);
+    const t = typeTitle(head, mode === "intro" ? 0.5 : 0.35);
     if (t) tl.add(t.play(), at);
   }
   if (items.length) {
@@ -669,6 +802,14 @@ export function play(mode: Mode, paused = false): gsap.core.Timeline | null {
   return tl;
 }
 
+/** The reading on screen, played to its end at once (its headline set). */
+export function finishReading(): void {
+  const tl = readingTL;
+  readingTL = null;
+  tl?.progress(1);
+  tl?.kill();
+}
+
 /** The intro's reading, handed back by main.ts when it starts playing. */
 export const setReading = (tl: gsap.core.Timeline | null) => {
   readingTL = tl;
@@ -676,22 +817,9 @@ export const setReading = (tl: gsap.core.Timeline | null) => {
 
 /* ------------------------------------------------------- the visitor's files */
 
-function dot(item: Item): [string, string] {
-  if (item.state === "reading") return ["dot-reading", "Reading"];
-  if (item.state === "error" || !item.report) return ["dot-none", "No marks"];
-  const f = item.report.findings;
-  if (f.some((x) => x.kind === "label")) return ["dot-label", "AI label"];
-  if (f.some((x) => x.kind === "private")) {
-    return [
-      "dot-private",
-      item.kind === "text" ? "Hidden characters" : "Personal data",
-    ];
-  }
-  return ["dot-none", "No marks"];
-}
-
 interface Row {
   li: HTMLLIElement;
+  name: HTMLSpanElement;
   dot: HTMLSpanElement;
   /** The thumbnail's slot, and the picture it shows. */
   thumb: HTMLElement;
@@ -735,7 +863,6 @@ function liveRow(item: Item): Row {
   b.appendChild(thumb);
   const name = document.createElement("span");
   name.className = "fi-name";
-  name.textContent = item.name;
   b.appendChild(name);
   const d = document.createElement("span");
   b.appendChild(d);
@@ -743,7 +870,7 @@ function liveRow(item: Item): Row {
     if (item !== current) show(item, "swap");
   });
   li.appendChild(b);
-  const row: Row = { li, dot: d, thumb };
+  const row: Row = { li, name, dot: d, thumb };
   rows.set(item, row);
   return row;
 }
@@ -755,12 +882,21 @@ export function prune(most: number): void {
   for (let i = live.length - 1; i >= 0 && live.length > most; i--) {
     const item = live[i];
     if (!item || item === current || item.state === "reading") continue;
-    if (item.thumbUrl) URL.revokeObjectURL(item.thumbUrl);
-    if (item.cleanUrl) URL.revokeObjectURL(item.cleanUrl);
-    rows.get(item)?.li.remove();
-    rows.delete(item);
-    live.splice(i, 1);
+    forget(item);
   }
+}
+
+/** Takes one of the visitor's files or texts out of "Your files": its row,
+ * its picture and clean copy freed. */
+export function forget(item: Item): void {
+  const i = live.indexOf(item);
+  if (i < 0) return;
+  if (item.thumbUrl) URL.revokeObjectURL(item.thumbUrl);
+  if (item.cleanUrl) URL.revokeObjectURL(item.cleanUrl);
+  rows.get(item)?.li.remove();
+  rows.delete(item);
+  live.splice(i, 1);
+  $("#side-live").hidden = live.length === 0;
 }
 
 /** The sidebar's "Your files": each row made once, its dot kept current. */
@@ -771,7 +907,11 @@ export function renderLiveList(): void {
   for (const item of live) {
     const row = rows.get(item) ?? liveRow(item);
     setThumb(row, item.thumbUrl);
-    const [cls, said] = dot(item);
+    // A text's name follows its words.
+    if (row.name.textContent !== item.name) row.name.textContent = item.name;
+    const title = item.title ?? item.name;
+    if (row.name.title !== title) row.name.title = title;
+    const [cls, said] = dotFor(item);
     row.dot.className = "fi-dot " + cls;
     row.dot.setAttribute("aria-label", said);
     if (row.li !== before) list.insertBefore(row.li, before);
@@ -803,6 +943,8 @@ export function initReader(): void {
     }),
   );
   $("#r-replay").addEventListener("click", () => show(current, "intro"));
+  reduceMQ.addEventListener("change", syncReplay);
+  syncReplay();
   addEventListener("resize", () => {
     fitNames(view());
     layoutHits(maybe(".an-main", view()));

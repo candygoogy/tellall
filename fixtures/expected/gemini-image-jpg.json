@@ -111,7 +111,7 @@
     {
       "group": "ai-label",
       "kind": "label",
-      "sentence": "The label says Google also put an invisible watermark in the pixels. A clean copy can't remove it.",
+      "sentence": "The label says Google also put an invisible watermark, SynthID, in the pixels. A clean copy can't remove it, and it's made to survive common edits such as screenshots, resizing and re-saving.",
       "fields": [],
       "cleanedBy": "remove-labels"
     },

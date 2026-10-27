@@ -1,11 +1,14 @@
 // "Copied text can hide characters.": the example text with its hidden
 // characters marked, the engine's sentences under it, and Copy clean text.
-// "Paste your own" reads the visitor's text as they type.
+// "Paste your own" reads the visitor's text as they type (live-text.ts,
+// as the reader's own text box does).
 import examples from "virtual:examples";
 import type { Report } from "@tellall/engine";
-import { $, $$, applyGeometry, copyText, fmt } from "../dom.ts";
+import { $, $$, applyGeometry, fmt } from "../dom.ts";
 import { read } from "../engine.ts";
-import { FADE, G, ScrollTrigger, motion } from "../motion.ts";
+import { copiedChars, copyWith } from "../feedback.ts";
+import { FADE, G, POP, ScrollTrigger, lightChips, motion } from "../motion.ts";
+import { liveText, type Pasted } from "./live-text.ts";
 import { renderChips, sentenceHTML } from "./text.ts";
 
 const EXAMPLE = "Example text with planted characters";
@@ -38,13 +41,7 @@ export function initHidden(): void {
     const on = (e.target as HTMLInputElement).checked;
     if (on) {
       text.classList.remove("chips-off");
-      if (motion()) {
-        G.fromTo(
-          $$(".chip", text),
-          { opacity: 0 },
-          { opacity: 1, duration: 0.01, stagger: 0.06, clearProps: "opacity" },
-        );
-      }
+      if (motion()) lightChips($$(".chip", text), 0.06);
     } else text.classList.add("chips-off");
   });
   const own = $("#hx-own");
@@ -70,26 +67,16 @@ export function initHidden(): void {
     if (open) input.focus();
     else example();
   });
-  // A paste's formatted copy goes with its text only while the box still
-  // holds exactly that text: typed or edited text has no page behind it.
-  const lines = (t: string) => t.replace(/\r\n?/g, "\n");
-  let pasted: { plain: string; html: string } | null = null;
-  input.addEventListener("paste", (e) => {
-    const html = e.clipboardData?.getData("text/html");
-    const plain = e.clipboardData?.getData("text/plain");
-    pasted = html && plain ? { plain: lines(plain), html } : null;
-  });
-  let timer = 0;
-  input.addEventListener("input", () => {
-    clearTimeout(timer);
-    timer = window.setTimeout(async () => {
-      const plain = input.value;
+  let pasted: Pasted | null = null;
+  liveText(input, {
+    pasted: () => pasted,
+    setPasted: (p) => (pasted = p),
+    empty: () => (status.textContent = "Paste or type some text first."),
+    read: async (plain, html) => {
       if (!plain) {
         example();
         return;
       }
-      const html =
-        pasted && lines(plain) === pasted.plain ? pasted.html : undefined;
       const mine = ++asked;
       status.textContent = "Reading…";
       try {
@@ -110,19 +97,13 @@ export function initHidden(): void {
         status.textContent =
           "tellall couldn't read it: " + (err as Error).message;
       }
-    }, 220);
+    },
   });
-  $("#hx-copy").addEventListener("click", async () => {
-    const ok = await copyText(hx.clean);
-    status.textContent = ok
-      ? `Copied ${fmt([...hx.clean].length)} characters as plain text.`
-      : "The browser didn't allow copying. Select the text and copy it instead.";
-    const lbl = $("#hx-copy span");
-    if (ok) {
-      lbl.textContent = "Copied";
-      setTimeout(() => (lbl.textContent = "Copy clean text"), 1600);
-    }
-  });
+  const copy = $("#hx-copy");
+  copy.addEventListener(
+    "click",
+    () => void copyWith(copy, hx.clean, copiedChars(hx.clean), status),
+  );
   // The formatted-copy bars, to scale.
   applyGeometry($(".fc"));
 }
@@ -137,13 +118,8 @@ export function hiddenScenes(): void {
       const chips = $$(".chip", $("#hx-text"));
       const ticks = $$(".pmap-tick", $("#hx-map"));
       G.timeline()
-        .fromTo(
-          chips,
-          { opacity: 0 },
-          { opacity: 1, duration: 0.01, stagger: 0.14, clearProps: "opacity" },
-          0.2,
-        )
-        .from(ticks, { opacity: 0, duration: 0.01, stagger: 0.14 }, 0.2)
+        .add(lightChips(chips, 0.14), 0.2)
+        .from(ticks, { opacity: 0, ...POP, stagger: 0.14 }, 0.2)
         .from(
           $$("#hx-findings li"),
           { opacity: 0, ...FADE, stagger: 0.08 },

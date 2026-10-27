@@ -729,7 +729,9 @@ export function labelFindings(label: Label, webp: boolean): Finding[] {
     out.push(finding(en.label.says(created.description, when)));
   }
   if (label.watermarkStated) {
-    out.push(finding(en.label.watermark(firstWord(label.signer))));
+    out.push(
+      finding(en.label.watermark(firstWord(label.signer), label.watermarkName)),
+    );
   }
   return out;
 }

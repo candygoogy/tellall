@@ -124,7 +124,7 @@ describe("ai images", () => {
     expect(sentences(r)).toEqual([
       "Signed with a certificate issued to Google LLC. The signature matches this file.",
       'The label says: "Created by Google Generative AI."',
-      "The label says Google also put an invisible watermark in the pixels. A clean copy can't remove it.",
+      "The label says Google also put an invisible watermark, SynthID, in the pixels. A clean copy can't remove it, and it's made to survive common edits such as screenshots, resizing and re-saving.",
       "No location, camera or other personal data.",
     ]);
   });
@@ -189,23 +189,29 @@ describe("ai images", () => {
     expect(out.notes).toEqual(["Nothing private to remove."]);
   });
 
-  test("clean --remove-labels: the label goes, the notice says the watermark stays", async () => {
-    const b = bytes("ai/chatgpt-image.png");
-    const out = await clean(file("ai/chatgpt-image.png", b), {
-      removeLabels: true,
-    });
-    const o = asBytes(out.output);
-    expect(pngParts(o, "caBX")).toEqual([]);
-    expect(Buffer.concat(pngParts(o, "IDAT"))).toEqual(
-      Buffer.concat(pngParts(b, "IDAT")),
-    );
-    expect(out.removed).toEqual(["ai-label"]);
-    expect(out.notes).toEqual([
-      "AI labels removed. The invisible watermark in the pixels (if any) stays; this tool can't remove it.",
-    ]);
-    const again = await inspect(file("x.png", o));
-    expect(again.headline).toBe(words.headline.empty);
-  });
+  // Reads a 2.5 MB PNG twice; it took 3.8 s once under load, against the
+  // 5 s default.
+  test(
+    "clean --remove-labels: the label goes, the notice says the watermark stays",
+    { timeout: 20_000 },
+    async () => {
+      const b = bytes("ai/chatgpt-image.png");
+      const out = await clean(file("ai/chatgpt-image.png", b), {
+        removeLabels: true,
+      });
+      const o = asBytes(out.output);
+      expect(pngParts(o, "caBX")).toEqual([]);
+      expect(Buffer.concat(pngParts(o, "IDAT"))).toEqual(
+        Buffer.concat(pngParts(b, "IDAT")),
+      );
+      expect(out.removed).toEqual(["ai-label"]);
+      expect(out.notes).toEqual([
+        "AI labels removed. The invisible watermark in the pixels (if any) stays; this tool can't remove it.",
+      ]);
+      const again = await inspect(file("x.png", o));
+      expect(again.headline).toBe(words.headline.empty);
+    },
+  );
 });
 
 // --- Review Focus 1 -------------------------------------------------------

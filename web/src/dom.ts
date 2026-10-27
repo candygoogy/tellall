@@ -97,21 +97,6 @@ export function tabs(list: Element, onChange: (t: HTMLElement) => void): void {
   });
 }
 
-/** A copy button's icon turns into a tick for a moment. */
-export function flashIcon(btn: HTMLElement, ok: boolean): void {
-  const use = btn.querySelector("use");
-  if (!use) return;
-  use.setAttribute("href", ok ? "#i-check" : "#i-copy");
-  btn.setAttribute(
-    "aria-label",
-    ok ? "Copied" : "Copy failed, select the text instead",
-  );
-  setTimeout(() => {
-    use.setAttribute("href", "#i-copy");
-    btn.setAttribute("aria-label", "Copy the command");
-  }, 1600);
-}
-
 /** Base64 to bytes. */
 export const b64 = (s: string) =>
   Uint8Array.from(atob(s), (c) => c.charCodeAt(0));

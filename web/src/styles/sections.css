@@ -2,7 +2,7 @@
 .sec { position: relative; padding: clamp(96px, 14vw, 176px) 0 0; }
 .sec-head { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: end; margin-bottom: clamp(40px, 5vw, 64px); }
 .sec-title { position: relative; grid-column: 1 / span 7; font-size: var(--t-h2); line-height: 1.06; font-weight: 600; letter-spacing: -0.025em; text-wrap: balance; }
-/* the title cursor: a yellow block that sets each word down as it passes (app.js typeTitle) */
+/* the title cursor: a yellow block that glides along each line, uncovering it (motion.ts typeTitle) */
 .tcur { position: absolute; left: 0; top: 0; width: 0.46em; height: 0.82em; background: var(--cursor); pointer-events: none; }
 .sec-lede { grid-column: 8 / span 5; font-size: var(--t-body); line-height: 1.6; color: var(--ink-2); text-wrap: pretty; }
 .sec-lede code { color: var(--ink); background: var(--s2); border: 1px solid var(--hair-2); border-radius: var(--r-xs); padding: 1px 5px; white-space: normal; }
@@ -173,16 +173,19 @@
 .cl-links line { stroke: var(--hair-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .cl-lists { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 28px; }
 .cl-list-title { font-size: var(--t-data); color: var(--ink-3); margin-bottom: 10px; }
-.cl-list ul { display: flex; flex-wrap: wrap; gap: 6px; }
-.cl-list li { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border-radius: var(--r-xs); font-size: var(--t-small); background: var(--s2); border: 1px solid var(--hair-2); color: var(--ink); }
+/* a key, not buttons: each part with its mark, no box */
+.cl-list ul { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.cl-list li { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-small); line-height: 1.4; color: var(--ink); }
 .cl-list li::before { content: ""; width: 7px; height: 7px; border-radius: var(--r-cell); background: var(--ctl); }
 .cl-list li.k-private::before { background: var(--you); rotate: 45deg; scale: 0.9; }
 .cl-list li.k-label::before { background: var(--label); }
 .cl-list li.k-pixels::before { background: var(--pixels); }
 .cl-list li.k-none { color: var(--ink-3); }
 .cl-list li.k-none::before { display: none; }
-.cl-note { margin-top: 18px; font-size: var(--t-small); color: var(--ink-2); line-height: 1.6; }
-.cl-note code { color: var(--ink); background: var(--s2); border: 1px solid var(--hair-2); border-radius: var(--r-xs); padding: 1px 5px; font-size: var(--t-data); white-space: normal; }
+.cl-note { margin-top: 18px; display: grid; gap: 10px; font-size: var(--t-small); color: var(--ink-2); line-height: 1.6; }
+.cl-note:empty { display: none; }
+/* the command to remove the label: the reader's hint, with its copy button */
+.cl-note .hint { margin-left: 0; max-width: none; }
 .cl-rules { margin-top: 40px; overflow-x: auto; }
 .rules { width: 100%; border-collapse: collapse; font-size: var(--t-small); min-width: 560px; }
 .rules caption { text-align: left; font-size: var(--t-small); color: var(--ink-3); padding-bottom: 12px; }
@@ -288,15 +291,17 @@
 .close { position: relative; padding: clamp(120px, 15vw, 192px) 0 clamp(96px, 10vw, 140px); }
 .close-in { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: end; }
 .close-copy { grid-column: 1 / span 6; }
-.close-title { position: relative; font-family: var(--display); font-size: var(--t-display); font-stretch: 118%; line-height: 1; font-weight: 620; letter-spacing: -0.03em; }
+.close-title { position: relative; font-family: var(--display); font-size: var(--t-display); font-stretch: 118%; line-height: 1; font-weight: 620; letter-spacing: -0.03em; text-wrap: balance; }
 @media (max-width: 599px) { .close-title { font-stretch: 100%; font-size: clamp(1.5rem, 7.8vw, 2rem); } }
 .close-lede { margin-top: 20px; font-size: var(--t-lead); line-height: 1.45; color: var(--ink-2); max-width: 30rem; }
 .mini { grid-column: 8 / span 5; border-radius: var(--r-lg); background: var(--win); border: 1px solid var(--hair-3); overflow: hidden; }
 .mini-top { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-bottom: 1px solid var(--hair-2); background: var(--s2); font-size: var(--t-small); color: var(--ink-3); }
 .mini-top b { color: var(--ink); font-weight: 500; }
 .mini-top svg { width: 14px; height: 14px; fill: var(--ink-3); color: var(--ink-3); }
-.mini-drop { margin: 14px; min-height: 220px; display: grid; place-items: center; align-content: center; gap: 12px; padding: 24px; border-radius: var(--r-sm); border: 1px dashed rgb(var(--paper-rgb) / 0.24); text-align: center; transition: border-color 100ms linear, background-color 100ms linear; }
+/* a click or a tap opens the picker, as Choose images does */
+.mini-drop { cursor: pointer; margin: 14px; min-height: 220px; display: grid; place-items: center; align-content: center; gap: 12px; padding: 24px; border-radius: var(--r-sm); border: 1px dashed rgb(var(--paper-rgb) / 0.24); text-align: center; transition: border-color 100ms linear, background-color 100ms linear; }
 .mini-drop.is-over { border-color: var(--cursor); background: rgb(var(--cursor-rgb) / 0.05); }
+@media (hover: hover) and (pointer: fine) { .mini-drop:hover { border-color: rgb(var(--paper-rgb) / 0.4); } }
 /* an empty file: the cursor waits at byte 0 */
 .mini-addr { font-size: var(--t-small); color: var(--ink-3); }
 .mini-drop p:not(.mini-addr) { font-size: var(--t-ui); color: var(--ink-2); max-width: 22rem; }

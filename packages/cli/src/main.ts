@@ -7,6 +7,7 @@ import {
   inspect,
   words,
   type Cleaned,
+  type Group,
   type Report,
 } from "@tellall/engine";
 import {
@@ -20,6 +21,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import {
   parseArgs,
   USAGE,
+  USAGE_LINE,
+  USAGE_LINE_CLEAN,
   UsageError,
   type Args,
   type FailOn,
@@ -45,8 +48,27 @@ let failed = false;
 /** What the folder walks and clean passed over, said once at the end. */
 const skipped = { folders: 0, links: 0, copies: 0 };
 
+/** Whether anything has been printed: the next block of output, on
+ * stdout or stderr, starts after a blank line. */
+let started = false;
+const lead = () => {
+  const gap = started ? "\n" : "";
+  started = true;
+  return gap;
+};
+
+/** The engine's notes say "tellall can't"; after "tellall:" that's "it
+ * can't", and a sentence starts in lower case. */
+const plainer = (message: string) =>
+  message
+    .replace(/\btellall (can't|couldn't)/g, "it $1")
+    .replace(/^[A-Z](?![A-Z])/, (c) => c.toLowerCase());
+
+const lowerFirst = (s: string) =>
+  s.replace(/^[A-Z](?![A-Z])/, (c) => c.toLowerCase());
+
 const say = (message: string) =>
-  process.stderr.write(`tellall: ${safe(message)}\n`);
+  process.stderr.write(`${lead()}tellall: ${safe(plainer(message))}\n`);
 
 function problem(message: string) {
   failed = true;
@@ -72,7 +94,7 @@ const WHY: Record<string, string> = {
   EROFS: "the disk is read-only",
   EIO: "the disk couldn't be read or written",
   EMFILE: "too many files open",
-  ERR_FS_FILE_TOO_LARGE: "it's larger than 2 GiB, more than tellall can read",
+  ERR_FS_FILE_TOO_LARGE: "it's larger than 2 GiB, more than can be read",
 };
 
 function why(e: unknown): string {
@@ -196,8 +218,8 @@ async function withBytes<T>(
 
 async function readStdin(): Promise<Uint8Array> {
   if (process.stdin.isTTY) {
-    say(
-      "reading text from the keyboard; end it with Ctrl+D on a line of its own (Ctrl+Z, then Enter, on Windows).",
+    process.stderr.write(
+      "tellall: reading text from the keyboard; end it with Ctrl+D on a line of its own (Ctrl+Z, then Enter, on Windows).\n",
     );
   }
   const chunks: Buffer[] = [];
@@ -214,20 +236,24 @@ const matches = (reports: Report[], on: FailOn) =>
 
 /** What the walks passed over, on stderr: not part of the output. */
 function saySkipped() {
+  const lines: string[] = [];
   if (skipped.copies) {
-    say(
-      `Skipped ${plural(skipped.copies, "clean copy", "clean copies")} tellall made earlier.`,
+    lines.push(
+      `skipped ${plural(skipped.copies, "clean copy", "clean copies")} made earlier.`,
     );
   }
   if (skipped.folders) {
-    say(
-      `Skipped ${plural(skipped.folders, "folder", "folders")} named node_modules or starting with a dot.`,
+    lines.push(
+      `skipped ${plural(skipped.folders, "folder", "folders")} named node_modules or starting with a dot.`,
     );
   }
   if (skipped.links) {
-    say(
-      `Skipped ${plural(skipped.links, "link", "links")} inside folders; name a link by itself to read it.`,
+    lines.push(
+      `skipped ${plural(skipped.links, "link", "links")} inside folders; name a link by itself to read it.`,
     );
+  }
+  if (lines.length) {
+    process.stderr.write(lead() + lines.map((l) => `tellall: ${l}\n`).join(""));
   }
 }
 
@@ -237,7 +263,7 @@ async function runInspect(args: Extract<Args, { command: "inspect" }>) {
   const show = (report: Report) => {
     reports.push(report);
     if (!args.json) {
-      out((reports.length > 1 ? "\n" : "") + formatReport(report, args.all));
+      out(lead() + formatReport(report, args.all));
     }
   };
   for (const path of args.paths) {
@@ -276,6 +302,35 @@ async function runInspect(args: Extract<Args, { command: "inspect" }>) {
   if (args.json) out(JSON.stringify(reports, null, 2) + "\n");
   saySkipped();
   return args.failOn !== null && matches(reports, args.failOn);
+}
+
+/** What a copy no longer carries, in plain words. */
+const GONE: Record<Group, string> = {
+  "ai-label": "the AI label",
+  "ai-source": "the AI-source tag",
+  location: "location",
+  device: "camera and device details",
+  dates: "dates and times",
+  software: "software names",
+  ids: "ID numbers",
+  "other-text": "other details",
+  "hidden-chars": "hidden characters",
+  "copy-extras": "formatted-copy extras",
+};
+
+/** "Removed location and dates: 1,234 bytes." */
+function removedLine(removed: Group[], bytes: number): string | null {
+  if (!removed.length) return null;
+  const names = removed.map((g) => GONE[g]);
+  const list =
+    names.length > 1
+      ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
+      : names[0];
+  const size =
+    bytes > 0
+      ? `: ${bytes.toLocaleString("en-US")} ${bytes === 1 ? "byte" : "bytes"}`
+      : "";
+  return `Removed ${list}${size}.`;
 }
 
 /** photo.jpg → photo.clean.jpg */
@@ -342,9 +397,10 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
     }
   }
   let labelsRemoved = false;
-  let blocks = 0;
+  /** Copies that were already there, said once at the end. */
+  const there: string[] = [];
   const print = (name: string, under: string[]) =>
-    out((blocks++ ? "\n" : "") + block(name, under));
+    out(lead() + block(name, under));
   /** The files read, so a file named twice is cleaned once. */
   const seen = new Set<string>();
   /** This run's copies, by path and by file, so two inputs can't write
@@ -369,14 +425,17 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
         }
         continue;
       }
+      let size = 0;
       const result = await withBytes<Cleaned>(
         entry,
         "clean",
-        (bytes) =>
-          clean(
+        (bytes) => {
+          size = bytes.length;
+          return clean(
             { kind: "file", name, bytes },
             { removeLabels: args.removeLabels },
-          ),
+          );
+        },
         (r) => !r.cleaned && r.notes[0] === words.clean.unknown,
       );
       if (!result) continue;
@@ -385,7 +444,7 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
         if (result.notes[0] === words.clean.unknown) {
           print(entry.shown, result.notes);
         } else {
-          problem(`${entry.shown}: ${result.notes.join(" ")}`);
+          problem(`${entry.shown}: ${lowerFirst(result.notes.join(" "))}`);
         }
         continue;
       }
@@ -411,11 +470,12 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
         }
         writeCopy(target, result.output as Uint8Array, args.force);
       } catch (e) {
-        problem(
-          codeOf(e) === "EEXIST"
-            ? `${shownTarget} is already there. Add --force to replace it.`
-            : `couldn't write ${shownTarget}: ${why(e)}`,
-        );
+        if (codeOf(e) === "EEXIST") {
+          failed = true;
+          there.push(shownTarget);
+        } else {
+          problem(`couldn't write ${shownTarget}: ${why(e)}`);
+        }
         continue;
       }
       written.add(key);
@@ -424,14 +484,24 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
       // The notice about labels comes once, at the end.
       const notes = result.notes.filter((n) => n !== words.clean.labelsRemoved);
       if (notes.length < result.notes.length) labelsRemoved = true;
+      const gone = removedLine(
+        result.removed,
+        size - (result.output as Uint8Array).length,
+      );
       print(entry.shown, [
         `Wrote ${shownTarget}`,
+        ...(gone ? [gone] : []),
         ...notes.map((n) => `· ${n}`),
       ]);
     }
   }
-  if (labelsRemoved) {
-    out(`${blocks ? "\n" : ""}${words.clean.labelsRemoved}\n`);
+  if (labelsRemoved) out(`${lead()}${words.clean.labelsRemoved}\n`);
+  if (there.length === 1) {
+    say(`${there[0]} is already there; add --force to replace it.`);
+  } else if (there.length) {
+    say(
+      `${there.length} clean copies already there; add --force to replace them.`,
+    );
   }
   saySkipped();
 }
@@ -442,7 +512,9 @@ async function main(): Promise<number> {
     args = parseArgs(process.argv.slice(2));
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
-    process.stderr.write(`tellall: ${e.message}\n\n${USAGE}`);
+    process.stderr.write(
+      `tellall: ${e.message}\n${e.cleaning ? USAGE_LINE_CLEAN : USAGE_LINE}\nRun tellall --help for all options.\n`,
+    );
     return 2;
   }
   if (args.command === "help") {

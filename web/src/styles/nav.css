@@ -1,6 +1,7 @@
 /* ---------- nav ---------- */
 .nav { position: fixed; inset: 0 0 auto 0; z-index: 50; height: var(--nav-h); border-bottom: 1px solid transparent; transition: background-color 160ms linear, border-color 160ms linear; }
-.nav.is-scrolled { background: rgb(var(--bg-rgb) / 0.96); border-bottom-color: var(--hair-2); }
+/* opaque: the page's text never shows through it */
+.nav.is-scrolled { background: var(--bg); border-bottom-color: var(--hair-2); }
 .nav-in { height: 100%; max-width: calc(var(--wrap) + var(--gutter) * 2); margin: 0 auto; padding: 0 var(--gutter); display: flex; align-items: center; gap: 24px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); border-radius: var(--r-xs); }
 /* the mark: ink rows take fill, the pulled-out label row takes color */
@@ -21,5 +22,5 @@
   .nav-links, .nav-gh { display: none; }
   .nav-menu { display: inline-flex; align-items: center; }
 }
-@media (max-width: 479px) { .nav .js-choose { display: none; } }
+@media (max-width: 479px) { .nav .nav-cta { display: none; } }
 

@@ -1,0 +1,8 @@
+fixtures/
+dist/
+test-results/
+.wrangler/
+package-lock.json
+# Hand-written in a compact one-rule-per-line style; keep it.
+web/*.html
+web/src/styles/

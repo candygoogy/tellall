@@ -4,6 +4,7 @@
 // so the window has its full height at first paint and nothing below it
 // moves when the script arrives.
 import type { Report } from "@tellall/engine";
+import { watermarkCheckers } from "@tellall/engine/checkers";
 import { cleanName, esc, fmt } from "../dom.ts";
 import type { ExampleFile } from "../example-types.ts";
 import type { CleanedCopy } from "../protocol.ts";
@@ -16,6 +17,7 @@ export interface Item {
   kind: "file" | "text";
   name: string;
   live: boolean;
+  /** "paste": a text with nothing in it yet (the reader's "New text"). */
   state?: "reading" | "done" | "error" | "paste";
   report?: Report;
   /** The file's size in bytes. */
@@ -42,6 +44,88 @@ export interface Item {
   /** Text: the text, and its clean copy. */
   plain?: string;
   cleanText?: string;
+  /** Text: the paste it came from, while the text is still that paste. */
+  pasted?: { plain: string; html: string } | null;
+  /** Text: the number of the latest reading asked for. */
+  asked?: number;
+  /** The full name, for the row's tooltip (a text's whole first line). */
+  title?: string;
+  /** Read because the visitor asked (a drop, a pick, a paste): the result
+   * takes the focus when it's ready. */
+  focusOnRead?: boolean;
+}
+
+/** What the sidebar's dot says: its class and its words. One shape per
+ * meaning (reader.css). A file with no findings that isn't "nothing found"
+ * couldn't be read, or only in part (damaged). */
+export function dotFor(item: {
+  kind: "file" | "text";
+  state?: Item["state"];
+  report?: Report;
+}): [string, string] {
+  if (item.state === "reading") return ["dot-reading", "Reading"];
+  if (item.state === "paste") return ["dot-none", "Empty"];
+  const r = item.report;
+  if (item.state === "error" || !r) return ["dot-error", "Couldn't read"];
+  const f = r.findings;
+  if (item.kind === "file" && !f.length && !r.empty) {
+    return ["dot-error", r.anatomy.length ? "Damaged" : "Couldn't read"];
+  }
+  if (f.some((x) => x.kind === "label")) return ["dot-label", "AI label"];
+  if (f.some((x) => x.kind === "private")) {
+    if (item.kind === "file") return ["dot-private", "Personal data"];
+    return [
+      "dot-private",
+      f.some((x) => x.kind === "private" && x.group === "hidden-chars")
+        ? "Hidden characters"
+        : "Page extras",
+    ];
+  }
+  return ["dot-none", "No marks"];
+}
+
+/** The site a formatted copy came from ("chatgpt.com"), from the address
+ * the browser put in it, if any. */
+export function sourceHost(r: Report | undefined): string | null {
+  const url = r?.findings
+    .flatMap((f) => (f.group === "copy-extras" ? f.fields : []))
+    .find((x) => x.name === "SourceURL")?.value;
+  const host = url && /^[a-z][\w+.-]*:\/\/([^/?#\s:]+)/i.exec(url)?.[1];
+  return host ? host.replace(/^www\./i, "") : null;
+}
+
+/** Invisible characters, kept out of a name. */
+const INVISIBLE = /[\p{Cf}\u{E0000}-\u{E007F}]/gu;
+/** About how long a text's name is, in characters. */
+const NAME_CHARS = 24;
+
+/** A text's name and its tooltip: its first words (about 24 characters,
+ * cut at a word) and its whole first line, each with " · chatgpt.com"
+ * when the copy says where it came from. */
+export function textName(
+  plain: string,
+  r?: Report,
+): { name: string; title: string } {
+  const line =
+    plain
+      .split(/\r\n?|\n/)
+      .map((l) => l.replace(INVISIBLE, "").replace(/\s+/g, " ").trim())
+      .find(Boolean) ?? "";
+  const chars = Array.from(line);
+  let name = line;
+  if (chars.length > NAME_CHARS) {
+    const cut = chars.slice(0, NAME_CHARS).join("");
+    const space = cut.lastIndexOf(" ");
+    name =
+      (space > NAME_CHARS / 2 ? cut.slice(0, space) : cut).replace(
+        /[\s,.;:-]+$/,
+        "",
+      ) + "…";
+  }
+  if (!name) name = plain ? "Pasted text" : "New text";
+  const host = sourceHost(r);
+  const at = host ? ` · ${host}` : "";
+  return { name: name + at, title: (line || name) + at };
 }
 
 /** What the line under the bar says at rest; the stylesheet shows the one
@@ -117,11 +201,20 @@ export function keysHTML(parts: Part[]): string {
   return keys.join("");
 }
 
+/** The status for a file of a kind tellall doesn't read. */
+export const CANT_READ = "Can't read this kind of file";
+
+/** The words a short status pill says for some long ones. */
+const SHORT: Record<string, string> = {
+  "Example result": "Example",
+  [CANT_READ]: "Can't read",
+};
+
 /** The window's status, long and short ("Read on this device in 12 ms",
- * "12 ms"). */
+ * "Read · 12 ms"). */
 export function statusHTML(text: string): string {
-  const short = /in (\d[\d,]*) ms$/.exec(text);
-  return `<span class="st-long">${esc(text)}</span><span class="st-short">${esc(short ? short[1] + " ms" : text === "Example result" ? "Example" : text)}</span>`;
+  const ms = /in (\d[\d,]*) ms$/.exec(text);
+  return `<span class="st-long">${esc(text)}</span><span class="st-short">${esc(ms ? `Read · ${ms[1]} ms` : (SHORT[text] ?? text))}</span>`;
 }
 
 /** The picture. `hold`: only its place, the same size; the build's first
@@ -146,7 +239,17 @@ export function findingsHTML(r: Report): string {
   return r.findings
     .map(
       (f, i) =>
-        `<li><button class="finding" type="button" data-i="${i}" aria-describedby="find-desc"><span class="f-mark k-${f.kind}" aria-hidden="true"></span><span class="f-text">${sentenceHTML(f.sentence)}</span></button></li>`,
+        `<li><button class="finding" type="button" data-i="${i}" aria-describedby="find-desc"><span class="f-mark k-${f.kind}" aria-hidden="true"></span><span class="f-text">${sentenceHTML(f.sentence)}</span></button>${checksHTML(f.sentence)}</li>`,
+    )
+    .join("");
+}
+/** Under a sentence that states a watermark: where to check for it, the
+ * makers' own pages (plain links; the page sends nothing). */
+function checksHTML(sentence: string): string {
+  return watermarkCheckers(sentence)
+    .map(
+      (c) =>
+        `<a class="f-check" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.text)}<span class="sr-only"> (opens in a new tab)</span></a>`,
     )
     .join("");
 }
@@ -155,16 +258,27 @@ function allHTML(r: Report): string {
   if (!rows.length) return "";
   return `<details class="all"><summary>Show everything</summary><table class="raw"><thead><tr><th scope="col">Field</th><th scope="col">Value</th><th scope="col">From</th></tr></thead><tbody>${rows.map((x) => `<tr><th scope="row">${esc(x.name)}</th><td>${esc(x.value)}</td><td class="from">${esc(x.from)}</td></tr>`).join("")}</tbody></table></details>`;
 }
-/** The hint under a label, its command set as code. */
+/** The hint under a label, its command set as code. The command may wrap
+ * between its words, never inside an option ("--remove-labels"). */
 export function hintHTML(sentence: string, cmd: string): string {
   const i = sentence.indexOf(cmd);
   if (i < 0) return esc(sentence);
+  const code = cmd
+    .split(" ")
+    .map((w) =>
+      w.startsWith("-") ? `<span class="nw">${esc(w)}</span>` : esc(w),
+    )
+    .join(" ");
   return (
     esc(sentence.slice(0, i)) +
-    `<code translate="no">${esc(cmd)}</code>` +
+    `<code translate="no">${code}</code>` +
     esc(sentence.slice(i + cmd.length))
   );
 }
+/** The hint with its copy button, as the reader and the clean-copy
+ * section both show it. */
+export const hintBlockHTML = (sentence: string, cmd: string) =>
+  `<p class="hint"><span class="hint-text">${hintHTML(sentence, cmd)}</span><button class="icon-btn js-copy-hint" type="button" aria-label="Copy the command"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg></button></p>`;
 function actionsHTML(item: Item): string {
   const r = item.report as Report;
   let left = "";
@@ -172,20 +286,20 @@ function actionsHTML(item: Item): string {
     const c = item.cleaned;
     if (c?.cleaned && item.cleanUrl) {
       const removed = c.removed.length > 0;
-      left = `<a class="btn ${removed ? "btn-primary" : "btn-secondary"} btn-sm js-dl" href="${esc(item.cleanUrl)}" download="${esc(cleanName(item.name))}"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Download clean copy</a>`;
+      left = `<a class="btn ${removed ? "btn-primary" : "btn-secondary"} btn-sm js-dl" href="${esc(item.cleanUrl)}" download="${esc(cleanName(item.name))}"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg><span>Download clean copy</span></a><p class="rv-note js-dl-status" hidden></p>`;
       if (c.notes.length)
         left += `<p class="rv-note">${esc(c.notes.join(" "))}</p>`;
     } else if (c) {
       left = `<p class="rv-note">${esc(c.notes.join(" "))}</p>`;
     }
   } else if (item.bytes) {
-    left = `<button class="btn btn-primary btn-sm js-dl-example" type="button"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg>Download clean copy</button>`;
+    left = `<button class="btn btn-primary btn-sm js-dl-example" type="button"><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg><span>Download clean copy</span></button><p class="rv-note js-dl-status" hidden></p>`;
   } else if (item.note) {
     left = `<p class="rv-note">${esc(item.note)}</p>`;
   }
   const hint =
     item.hint && item.command && r.findings.some((f) => f.group === "ai-label")
-      ? `<p class="hint"><span class="hint-text">${hintHTML(item.hint, item.command)}</span><button class="icon-btn js-copy-hint" type="button" aria-label="Copy the command"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg></button></p>`
+      ? hintBlockHTML(item.hint, item.command)
       : "";
   return `<div class="rv-actions">${left}${hint}</div>`;
 }

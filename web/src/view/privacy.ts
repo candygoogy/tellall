@@ -3,7 +3,7 @@
 // honest count of the page's network requests and a button that tries to
 // send one, so the visitor sees the page's own rules stop it.
 import { $, $$, fmt } from "../dom.ts";
-import { FADE, G, STEP, ScrollTrigger, motion } from "../motion.ts";
+import { FADE, G, ScrollTrigger, motion, reduceMQ } from "../motion.ts";
 
 interface Box {
   x: number;
@@ -103,11 +103,10 @@ function playNet(cycles = 2): void {
   tl.fromTo(
     $$(".ln-flow", net),
     { strokeDashoffset: 60 },
-    { strokeDashoffset: 0, duration: 2.6, ease: STEP(2.6) },
+    { strokeDashoffset: 0, duration: 2.6, ease: "none" },
     0,
   );
-  // Three packets: file to tab to screen, hopping along the drawn paths a
-  // cell at a time.
+  // Three packets: file to tab to screen, gliding along the drawn paths.
   const along = (
     path: SVGPathElement,
     el: HTMLElement,
@@ -116,13 +115,13 @@ function playNet(cycles = 2): void {
   ) => {
     const len = path.getTotalLength();
     const o = { t: 0 };
-    tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.01 }, at)
+    tl.fromTo(el, { opacity: 0 }, { opacity: 1, ...FADE }, at)
       .to(
         o,
         {
           t: 1,
           duration: dur,
-          ease: STEP(dur),
+          ease: "power2.inOut",
           onUpdate: () => {
             const pt = path.getPointAtLength(o.t * len);
             G.set(el, { x: pt.x, y: pt.y });
@@ -130,7 +129,7 @@ function playNet(cycles = 2): void {
         },
         at,
       )
-      .to(el, { opacity: 0, duration: 0.01 }, at + dur);
+      .to(el, { opacity: 0, duration: 0.1, ease: "none" }, at + dur - 0.05);
   };
   const f1 = $<SVGPathElement>("#flow1");
   const f2 = $<SVGPathElement>("#flow2");
@@ -149,8 +148,8 @@ function playNet(cycles = 2): void {
     narrow ? { x: t.x + t.w / 2, y: t.y } : { x: t.x, y: t.y - t.h / 2 },
     0.6,
   )
-    .to(up, { opacity: 1, duration: 0.01 }, 0.6)
-    .to(up, { x: gp.x, y: gp.y, duration: 0.7, ease: STEP(0.7) }, 0.6)
+    .to(up, { opacity: 1, ...FADE }, 0.6)
+    .to(up, { x: gp.x, y: gp.y, duration: 0.7, ease: "power2.inOut" }, 0.6)
     .add(() => {
       const gate = $("#gate");
       gate.classList.add("is-hit");
@@ -160,16 +159,15 @@ function playNet(cycles = 2): void {
       up,
       {
         keyframes: [
-          { opacity: 0.2, duration: 0.1 },
-          { opacity: 1, duration: 0.1 },
-          { opacity: 0, duration: 0.1 },
+          { opacity: 0.2, duration: 0.1, ease: "power2.out" },
+          { opacity: 1, duration: 0.1, ease: "power2.out" },
+          { opacity: 0, duration: 0.14, ease: "power2.out" },
         ],
-        ease: "steps(1)",
       },
       1.3,
     );
-  // The cursor reads the field row by row: each cell lights for one beat,
-  // then two dimmer beats, then back.
+  // The cursor reads the field row by row: each cell lights quickly, then
+  // dims and settles back.
   const css = getComputedStyle(document.documentElement);
   const rgb = (name: string) =>
     css.getPropertyValue(name).trim().split(/\s+/).join(",");
@@ -180,12 +178,19 @@ function playNet(cycles = 2): void {
     { backgroundColor: `rgba(${P},0.14)` },
     {
       keyframes: [
-        { backgroundColor: `rgba(${C},1)`, duration: 0.12 },
-        { backgroundColor: `rgba(${C},0.45)`, duration: 0.24 },
-        { backgroundColor: `rgba(${P},0.14)`, duration: 0.24 },
+        { backgroundColor: `rgba(${C},1)`, duration: 0.1, ease: "power2.out" },
+        {
+          backgroundColor: `rgba(${C},0.45)`,
+          duration: 0.24,
+          ease: "power2.out",
+        },
+        {
+          backgroundColor: `rgba(${P},0.14)`,
+          duration: 0.3,
+          ease: "power2.out",
+        },
       ],
       stagger: { amount: 1.6, from: "start" },
-      ease: "steps(1)",
     },
     0,
   );
@@ -262,7 +267,12 @@ export function initPrivacy(): void {
         : "The request left this page; it failed only because tellall.invalid doesn't exist. This page's rules should have stopped it.";
     playNet(2);
   });
-  $("#net-replay").addEventListener("click", () => playNet(2));
+  const replay = $("#net-replay");
+  replay.addEventListener("click", () => playNet(2));
+  // Under reduced motion the diagram stays still: nothing to replay.
+  const sync = () => (replay.hidden = !motion());
+  reduceMQ.addEventListener("change", sync);
+  sync();
 }
 
 export function privacyScenes(): void {

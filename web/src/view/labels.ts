@@ -6,7 +6,15 @@ import type { Report } from "@tellall/engine";
 import examples from "virtual:examples";
 import { $, $$, applyGeometry, esc, fmt, tabs } from "../dom.ts";
 import type { ExampleFile } from "../example-types.ts";
-import { G, STEP, ScrollTrigger, decode, motion, swap } from "../motion.ts";
+import {
+  FILL,
+  G,
+  POP,
+  ScrollTrigger,
+  decode,
+  motion,
+  swap,
+} from "../motion.ts";
 import { attachCursor, buildBar, zoomRange } from "./anatomy.ts";
 
 interface Action {
@@ -300,13 +308,13 @@ export function labelsScenes(): void {
       decode($("#lc-where"), 0.5);
       G.from($$("#lc-strip .fill"), {
         scaleX: 0,
-        duration: 0.5,
+        duration: 0.6,
         stagger: 0.08,
-        ease: STEP(0.5),
+        ease: FILL,
       });
       G.from($$("#lc-fields dt, #lc-fields dd"), {
         opacity: 0,
-        duration: 0.01,
+        ...POP,
         stagger: 0.03,
       });
     },

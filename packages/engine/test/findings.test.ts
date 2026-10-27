@@ -1,7 +1,14 @@
 // Sentences built from odd metadata (engine audit, 2026-10-26): values out
 // of range, markup in a value, and very long lists.
 import { expect, test } from "vitest";
-import { metaFindings, momentOf, pngTime, utcMoment } from "../src/findings.ts";
+import type { Label, LabelAction } from "../src/c2pa/read.ts";
+import {
+  labelFindings,
+  metaFindings,
+  momentOf,
+  pngTime,
+  utcMoment,
+} from "../src/findings.ts";
 import type { Block, Meta, Read } from "../src/image/read.ts";
 import { en } from "../src/words/en.ts";
 
@@ -115,4 +122,71 @@ test("clean and source notes use plain words, no codes", () => {
   expect(en.source("somethingNew")).toBe(
     "A tag in the file says how it was made.",
   );
+});
+
+// The watermark is named only when the label names it, never from who
+// signed it (OpenAI images carry SynthID too, but a label may not say so).
+const step = (
+  action: string,
+  more: Partial<LabelAction> = {},
+): LabelAction => ({
+  action,
+  when: null,
+  agent: null,
+  agentName: null,
+  agentVersion: null,
+  description: null,
+  sourceType: null,
+  ...more,
+});
+const label = (more: Partial<Label>): Label => ({
+  signer: null,
+  signatureMatches: true,
+  generator: null,
+  actions: [],
+  digitalSourceType: null,
+  watermarkStated: false,
+  watermarkName: null,
+  ingredients: 0,
+  detailsUnavailable: false,
+  fields: [],
+  metadata: {},
+  range: null,
+  ...more,
+});
+const watermarkSentence = (l: Label) =>
+  labelFindings(l, false)
+    .map((f) => f.sentence)
+    .find((s) => s.includes("invisible watermark"));
+
+test("the watermark is named only when the label names it", () => {
+  expect(
+    watermarkSentence(
+      label({
+        signer: "Google LLC",
+        actions: [
+          step("c2pa.edited", {
+            description: "Applied imperceptible SynthID watermark.",
+          }),
+        ],
+        watermarkStated: true,
+        watermarkName: "SynthID",
+      }),
+    ),
+  ).toBe(
+    "The label says Google also put an invisible watermark, SynthID, in the pixels. A clean copy can't remove it, and it's made to survive common edits such as screenshots, resizing and re-saving.",
+  );
+  // A bare c2pa.watermarked action from OpenAI: no name, however likely.
+  expect(
+    watermarkSentence(
+      label({
+        signer: "OpenAI OpCo, LLC",
+        actions: [step("c2pa.watermarked.unbound")],
+        watermarkStated: true,
+      }),
+    ),
+  ).toBe(
+    "The label says OpenAI also put an invisible watermark in the pixels. A clean copy can't remove it.",
+  );
+  expect(watermarkSentence(label({ signer: "Google LLC" }))).toBeUndefined();
 });

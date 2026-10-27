@@ -6,10 +6,10 @@ import type { Group } from "@tellall/engine";
 import { $, $$, cleanName, esc, fmt, tabs } from "../dom.ts";
 import {
   FADE,
+  FILL,
   G,
-  STEP,
   ScrollTrigger,
-  TICK,
+  TRAVEL,
   decode,
   motion,
   swap,
@@ -21,7 +21,7 @@ import {
   type Part,
   type Seg,
 } from "./anatomy.ts";
-import { hintHTML } from "./result.ts";
+import { hintBlockHTML, wireHint } from "./result.ts";
 
 const GROUP_WORDS: Partial<Record<Group, string>> = {
   location: "Location",
@@ -64,14 +64,14 @@ const CL: Record<string, Model> = {
     after: chatgpt.report.anatomy,
     b: chatgpt.cleaned.size,
     removed: chatgpt.cleaned.removed,
-    note: [
-      esc(chatgpt.cleaned.notes.join(" ")),
-      chatgpt.hint && chatgpt.command
-        ? hintHTML(chatgpt.hint, chatgpt.command)
-        : "",
-    ]
-      .filter(Boolean)
-      .join(" "),
+    note:
+      [esc(chatgpt.cleaned.notes.join(" "))]
+        .filter(Boolean)
+        .map((t) => `<p>${t}</p>`)
+        .join("") +
+      (chatgpt.hint && chatgpt.command
+        ? hintBlockHTML(chatgpt.hint, chatgpt.command)
+        : ""),
   },
 };
 let key = "gps";
@@ -114,22 +114,24 @@ function render(animate: boolean): void {
   const kept: { n: string; k: string }[] = [];
   const seen = new Set<string>();
   m.after.forEach((p) => {
-    p.note.split(", ").forEach((n) => {
-      if (n === "End" || n === "File signature" || seen.has(n)) return;
-      seen.add(n);
-      kept.push({
-        n:
-          p.part === "pixels"
-            ? "Picture data, byte for byte"
-            : n.replace(/ · signed by .*/, ""),
-        k:
-          p.part === "label"
-            ? "k-label"
-            : p.part === "pixels"
-              ? "k-pixels"
-              : "",
+    // "C2PA label · signed by OpenAI OpCo, LLC": the signer's name has a
+    // comma of its own, so it goes before the parts are split.
+    p.note
+      .replace(/ · signed by .*/, "")
+      .split(", ")
+      .forEach((n) => {
+        if (n === "End" || n === "File signature" || seen.has(n)) return;
+        seen.add(n);
+        kept.push({
+          n: p.part === "pixels" ? "Picture data, byte for byte" : n,
+          k:
+            p.part === "label"
+              ? "k-label"
+              : p.part === "pixels"
+                ? "k-pixels"
+                : "",
+        });
       });
-    });
   });
   $("#cl-removed").innerHTML = m.removed.length
     ? m.removed
@@ -143,6 +145,7 @@ function render(animate: boolean): void {
     ? `<b>${fmt(m.a - m.b)} bytes</b> removed · picture data unchanged`
     : `Same file, byte for byte`;
   $("#cl-note").innerHTML = m.note;
+  wireHint($("#cl-note"), key === "chatgpt" ? chatgpt.command : null);
   requestAnimationFrame(() => {
     fitNames($("#cl"));
     drawLinks();
@@ -200,8 +203,8 @@ export function drawLinks(): void {
     .join("");
 }
 
-/** The original fills, then the private parts blink out like deleted
- * bytes and the kept parts close up cell by cell. */
+/** The original fills, then the private parts flicker out like deleted
+ * bytes and the kept parts slide together. */
 function play(): void {
   if (!motion()) return;
   last = Date.now();
@@ -210,7 +213,7 @@ function play(): void {
   const barB = $("#cl-bar-b");
   const partsA = $$(".part", barA);
   const partsB = $$(".part", barB);
-  const tl = G.timeline({ defaults: { ease: STEP(0.9) } });
+  const tl = G.timeline({ defaults: { ease: FILL } });
   decode($("#cl-delta"), 0.45);
   tl.fromTo(
     barA,
@@ -270,7 +273,7 @@ function play(): void {
         x: 0,
         scaleX: 1,
         duration: 0.6,
-        ease: STEP(0.6),
+        ease: TRAVEL,
         clearProps: "transform",
       },
       1.3,
@@ -287,12 +290,11 @@ function play(): void {
     ghosts,
     {
       keyframes: [
-        { opacity: 0.25, duration: TICK },
-        { opacity: 1, duration: TICK },
-        { opacity: 0, duration: TICK },
+        { opacity: 0.3, duration: 0.08, ease: "power2.out" },
+        { opacity: 1, duration: 0.08, ease: "power2.out" },
+        { opacity: 0, duration: 0.14, ease: "power2.out" },
       ],
-      ease: "steps(1)",
-      stagger: TICK,
+      stagger: 0.08,
     },
     0.95,
   );
@@ -311,7 +313,7 @@ function play(): void {
     {
       v: m.b,
       duration: 0.6,
-      ease: STEP(0.6),
+      ease: TRAVEL,
       onUpdate: () => {
         sizeB.textContent = `${cleanName(m.name)} · ${fmt(o.v)} bytes`;
       },

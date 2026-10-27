@@ -50,8 +50,13 @@ export interface Label {
   actions: LabelAction[];
   /** The first sourceType found. */
   digitalSourceType: string | null;
-  /** An action starting "c2pa.watermarked", or a description naming one. */
+  /** An action starting "c2pa.watermarked", a description naming one, or
+   * a named watermark (below). */
   watermarkStated: boolean;
+  /** "SynthID" when the label itself names it: in an action's description
+   * or softwareAgent, or in an assertion's label. Never from the signer
+   * alone. */
+  watermarkName: "SynthID" | null;
   ingredients: number;
   /** True when the label is there but couldn't be read (always for WebP). */
   detailsUnavailable: boolean;
@@ -116,6 +121,13 @@ export async function readLabel(
   }
   const ingredients = attempt(() => ingredientsOf(active, fields), 0);
   const metadata = attempt(() => metadataOf(store), {});
+  const named = actions.some((a) =>
+    SYNTHID.test(`${a.agent ?? ""} ${a.description ?? ""}`),
+  );
+  const watermarkName =
+    named || attempt(() => assertionNamesSynthId(store), false)
+      ? "SynthID"
+      : null;
 
   return {
     signer,
@@ -123,11 +135,15 @@ export async function readLabel(
     generator,
     actions,
     digitalSourceType: actions.find((a) => a.sourceType)?.sourceType ?? null,
-    watermarkStated: actions.some(
-      (a) =>
-        a.action.startsWith("c2pa.watermarked") ||
-        /watermark/i.test(a.description ?? ""),
-    ),
+    // A label that names SynthID states a watermark.
+    watermarkStated:
+      watermarkName !== null ||
+      actions.some(
+        (a) =>
+          a.action.startsWith("c2pa.watermarked") ||
+          /watermark/i.test(a.description ?? ""),
+      ),
+    watermarkName,
     ingredients,
     detailsUnavailable: false,
     fields,
@@ -145,6 +161,7 @@ function unreadable(range: Range): Label {
     actions: [],
     digitalSourceType: null,
     watermarkStated: false,
+    watermarkName: null,
     ingredients: 0,
     detailsUnavailable: true,
     fields: [
@@ -182,9 +199,8 @@ export function unescapeDn(dn: string): string {
     /((?:\\[0-9A-Fa-f]{2})+)|\\([ "#+,;<=>\\])/g,
     (_m, hex: string | undefined, ch: string | undefined) => {
       if (ch !== undefined) return ch;
-      const bytes = Uint8Array.from(
-        (hex as string).slice(1).split("\\"),
-        (h) => parseInt(h, 16),
+      const bytes = Uint8Array.from((hex as string).slice(1).split("\\"), (h) =>
+        parseInt(h, 16),
       );
       return new TextDecoder().decode(bytes);
     },
@@ -200,8 +216,16 @@ function signerOf(manifest: Manifest, fields: Field[]): string | null {
     cert.subjectName.getField("CN")[0] ??
     null;
   if (signer) fields.push({ name: "Signer", value: signer, from });
-  fields.push({ name: "Certificate subject", value: unescapeDn(cert.subject), from });
-  fields.push({ name: "Certificate issuer", value: unescapeDn(cert.issuer), from });
+  fields.push({
+    name: "Certificate subject",
+    value: unescapeDn(cert.subject),
+    from,
+  });
+  fields.push({
+    name: "Certificate issuer",
+    value: unescapeDn(cert.issuer),
+    from,
+  });
   return signer;
 }
 
@@ -255,6 +279,17 @@ function ingredientsOf(manifest: Manifest, fields: Field[]): number {
       if (value) fields.push({ name, value, from });
   }
   return count;
+}
+
+/** Google's pixel watermark, as a label names it. */
+const SYNTHID = /\bsynth-?id\b/i;
+
+/** An assertion in any manifest whose label names SynthID (a vendor's own
+ * assertion for its watermark). */
+function assertionNamesSynthId(store: ManifestStore): boolean {
+  return store.manifests.some((m) =>
+    (m.assertions?.assertions ?? []).some((a) => SYNTHID.test(a.label ?? "")),
+  );
 }
 
 /** Assertions that hold a photo's metadata as JSON-LD (or CBOR). */

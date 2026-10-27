@@ -26,7 +26,7 @@ import { scanHtml } from "./text/html.ts";
 import { en } from "./words/en.ts";
 
 export { en as words };
-export { ReaderMissing };
+export { detect, ReaderMissing };
 
 export type Input =
   | { kind: "file"; name: string; bytes: Uint8Array }

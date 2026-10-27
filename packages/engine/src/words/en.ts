@@ -166,8 +166,13 @@ export const en = {
       if (when) return `${quoted} on ${moment(when)}.`;
       return /[.!?]$/.test(description) ? quoted : `${quoted}.`;
     },
-    watermark: (signerShort: string | null) =>
-      `The label says ${signerShort ?? "its maker"} also put an invisible watermark in the pixels. A clean copy can't remove it.`,
+    /** The watermark named only when the label names it. What SynthID
+     * survives is what Google and OpenAI say it's made for: common edits,
+     * not every edit. */
+    watermark: (signerShort: string | null, name: "SynthID" | null = null) =>
+      name
+        ? `The label says ${signerShort ?? "its maker"} also put an invisible watermark, ${name}, in the pixels. A clean copy can't remove it, and it's made to survive common edits such as screenshots, resizing and re-saving.`
+        : `The label says ${signerShort ?? "its maker"} also put an invisible watermark in the pixels. A clean copy can't remove it.`,
     webp: "This image carries an AI label (details can't be read for WebP yet).",
     damaged:
       "This image carries an AI label, but it's damaged and can't be read.",

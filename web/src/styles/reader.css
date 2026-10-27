@@ -18,6 +18,8 @@
 .crumbs-mark { width: 16px; height: 16px; fill: var(--ink-3); color: var(--ink-3); flex: none; }
 .crumbs-name { color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crumbs-sep { color: var(--ctl); }
+/* a new text is in no list yet: its name alone */
+.crumbs.is-solo .crumbs-group, .crumbs.is-solo .crumbs-sep { display: none; }
 .win-tools { display: flex; align-items: center; gap: 6px; flex: none; }
 .win-status { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 9px 0 8px; border-radius: var(--r-sm); font: 400 var(--t-data)/1 var(--data); font-stretch: 87.5%; color: var(--ink-2); background: var(--bg); border: 1px solid var(--hair-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .win-status .sdot { width: 6px; height: 10px; background: var(--ink-3); flex: none; }
@@ -27,7 +29,7 @@
 .win-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 216px 1fr; }
 
 /* sidebar */
-.side { border-right: 1px solid var(--hair-2); padding: 14px 10px; display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow-y: auto; }
+.side { position: relative; border-right: 1px solid var(--hair-2); padding: 14px 10px; display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow-y: auto; }
 .side-title { font-size: var(--t-data); font-weight: 500; color: var(--ink-3); padding: 0 8px; margin-bottom: 6px; }
 .side-list { display: grid; gap: 1px; }
 .file-item { width: 100%; display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; padding: 6px 8px; min-height: 40px; border-radius: var(--r-sm); background: transparent; border: 1px solid transparent; text-align: left; font-size: var(--t-small); color: var(--ink-2); transition: background-color 100ms linear, color 100ms linear; touch-action: manipulation; }
@@ -43,17 +45,23 @@
 .dot-private { background: var(--you); rotate: 45deg; scale: 0.9; }
 .dot-none { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ctl); }
 .dot-reading { background: var(--cursor); animation: blink var(--blink) steps(1, end) 5 both; }
+/* couldn't read: a dash, nothing where a mark would be */
+.fi-dot.dot-error, .side-legend .dot-error { height: 2px; background: var(--ink-3); }
 .side-all { margin: 8px 8px 0; }
-.side-foot { margin-top: 6px; padding: 0 8px; display: grid; gap: 8px; }
-.side-foot .btn { justify-self: start; }
+.side-note { margin: 8px 8px 0; font-size: var(--t-data); line-height: 1.45; color: var(--ink-2); }
+/* the way to add more stays at the bottom of the sidebar, however long the lists */
+.side-foot { position: sticky; bottom: -14px; z-index: 1; margin: auto -10px -14px; padding: 12px 18px 14px; display: grid; gap: 8px; background: var(--win); border-top: 1px solid var(--hair-2); }
+.side-add { display: flex; flex-wrap: wrap; gap: 6px; }
 .side-foot p { font-size: var(--t-data); line-height: 1.45; color: var(--ink-3); }
-.side-legend { display: grid; gap: 4px; margin-top: 4px; }
+/* the legend rides in the foot, above the buttons, so a long list never scrolls it out of sight */
+.side-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 2px; }
 .side-legend span { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-data); color: var(--ink-3); }
 
 /* main view */
 .win-main { position: relative; min-width: 0; min-height: 0; }
 .view { position: absolute; inset: 0; display: flex; flex-direction: column; }
 .rv-top { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(180px, 220px) 1fr; gap: 28px; padding: 20px 28px 0; }
+.rv-top.is-solo { grid-template-columns: minmax(0, 40rem); }
 .rv-plate { position: relative; align-self: start; border-radius: var(--r-sm); overflow: hidden; background: var(--s2); box-shadow: 0 0 0 1px var(--hair-2); }
 .rv-plate img { width: 100%; height: auto; aspect-ratio: var(--ar, 1); object-fit: cover; }
 /* the picture's place in the first paint (reader-html.ts), the same size until the picture comes */
@@ -80,6 +88,9 @@
 .f-mark.k-harmless { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ctl); }
 .f-mark.k-info { background: var(--s4); box-shadow: inset 0 0 0 1.5px var(--ctl); }
 .finding.is-on .f-mark { scale: 1.25; }
+/* where to check a watermark the label states: a quiet link lined up with the sentence above it */
+.f-check { display: block; width: fit-content; margin: -5px 0 5px 24px; padding: 3px 0; font-size: var(--t-data); line-height: 1.5; color: var(--ink-2); transition: color 100ms linear; }
+@media (hover: hover) and (pointer: fine) { .f-check:hover { color: var(--ink); } }
 .f-text code, .hx-findings code { font-size: max(12px, 0.8125em); color: var(--ink-2); letter-spacing: -0.01em; white-space: normal; }
 .all { margin-top: 14px; border-top: 1px solid var(--hair); padding-top: 10px; }
 .all summary { cursor: pointer; font-size: var(--t-small); color: var(--ink-2); list-style: none; display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px; margin-left: -8px; border-radius: var(--r-sm); min-height: 32px; touch-action: manipulation; }
@@ -150,21 +161,34 @@
 .hint { display: flex; align-items: center; gap: 10px; margin-left: auto; max-width: 560px; font-size: var(--t-data); line-height: 1.5; color: var(--ink-3); }
 .hint code { color: var(--ink-2); background: var(--s2); border: 1px solid var(--hair-2); border-radius: var(--r-xs); padding: 1px 5px; font-size: var(--t-data); white-space: normal; }
 .hint .icon-btn { flex: none; }
+.hint em { font-style: normal; color: var(--ink-2); }
 
 /* text view */
 .rv-text-body { flex: 1; min-height: 0; display: grid; grid-template-rows: auto auto 1fr; gap: 14px; padding: 22px 28px 0; }
 .rv-report-text .rv-findings { margin-top: 0; }
+/* the visitor's own text: headline, the box, the text marked, the sentences */
+.rv-text-body.is-edit { grid-template-rows: auto auto auto auto 1fr; gap: 12px; }
+.rv-text-body.is-edit .rv-status { margin: 0; }
+.rv-text-body.is-edit .rv-err { color: var(--ink-2); }
+.tx-field { display: grid; gap: 6px; }
+.tx-label { font-size: var(--t-data); color: var(--ink-3); }
+.tx-input { width: 100%; min-height: 80px; height: 80px; resize: vertical; padding: 10px 14px; border-radius: var(--r-sm); background: var(--bg); border: 1px solid var(--ctl); color: var(--ink); font-size: var(--t-ui); line-height: 1.6; transition: border-color 120ms linear; }
+@media (hover: hover) and (pointer: fine) { .tx-input:hover { border-color: var(--ink-3); } }
+.is-edit .tx { max-height: 150px; }
+.is-draft .tx-label { font-size: var(--t-ui); color: var(--ink-2); }
+.is-draft .tx-input { height: 220px; }
 .tx { max-height: 210px; min-height: 0; overflow-y: auto; padding: 16px 18px; border-radius: var(--r-sm); background: var(--bg); border: 1px solid var(--hair-2); font-size: var(--t-ui); line-height: 1.85; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
-.chip { display: inline-flex; align-items: center; height: 20px; margin: 0 2px; padding: 0 5px; border-radius: var(--r-xs); font-size: var(--t-data); line-height: 1; vertical-align: 1px; white-space: nowrap; }
-.chip.c-hidden { color: var(--ink); background: rgb(var(--you-rgb) / 0.16); box-shadow: inset 0 0 0 1px rgb(var(--you-rgb) / 0.7); }
-.chip.c-space { color: var(--ink-2); background: var(--s3); box-shadow: inset 0 0 0 1px var(--ctl); }
-.chip.c-harmless { color: var(--ink-3); background: transparent; box-shadow: inset 0 0 0 1px var(--hair-3); }
-.chip.is-on { box-shadow: inset 0 0 0 1px var(--you-ink); background: rgb(var(--you-rgb) / 0.3); }
+/* the mark is a layer under the letters (--lit fades it in, motion.ts lightChips) */
+.chip { --lit: 1; position: relative; isolation: isolate; display: inline-flex; align-items: center; height: 20px; margin: 0 2px; padding: 0 5px; border-radius: var(--r-xs); font-size: var(--t-data); line-height: 1; vertical-align: 1px; white-space: nowrap; }
+.chip::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; opacity: var(--lit); }
+.chip.c-hidden { color: var(--ink); }
+.chip.c-hidden::before { background: rgb(var(--you-rgb) / 0.16); box-shadow: inset 0 0 0 1px rgb(var(--you-rgb) / 0.7); }
+.chip.c-space { color: var(--ink-2); }
+.chip.c-space::before { background: var(--s3); box-shadow: inset 0 0 0 1px var(--ctl); }
+.chip.c-harmless { color: var(--ink-3); }
+.chip.c-harmless::before { box-shadow: inset 0 0 0 1px var(--hair-3); }
+.chip.is-on::before { box-shadow: inset 0 0 0 1px var(--you-ink); background: rgb(var(--you-rgb) / 0.3); }
 .chips-off .chip { display: none; }
-.paste-box { display: grid; gap: 10px; padding: 24px 28px; }
-.paste-box label { font-size: var(--t-ui); color: var(--ink-2); }
-.paste-box textarea { width: 100%; min-height: 220px; resize: vertical; padding: 14px 16px; border-radius: var(--r-sm); background: var(--bg); border: 1px solid var(--ctl); color: var(--ink); font-size: var(--t-ui); line-height: 1.6; }
-.paste-box p { font-size: var(--t-data); color: var(--ink-3); }
 
 /* position map for text: one tick per character, where it sits */
 .pmap { position: relative; height: 26px; margin-top: 4px; }

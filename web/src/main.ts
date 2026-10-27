@@ -46,9 +46,11 @@ function initNav(): void {
     { threshold: 0.6 },
   );
   $$(".mini-addr, .foot-dump").forEach((el) => seen.observe(el));
-  // The nav's own "Choose images" shows once the hero's buttons are gone.
-  new IntersectionObserver(([e]) =>
-    nav.classList.toggle("has-cta", !e?.isIntersecting),
+  // The nav's own "Choose images" and "Paste text" show once the hero's
+  // buttons are gone, under the nav counting as gone.
+  new IntersectionObserver(
+    ([e]) => nav.classList.toggle("has-cta", !e?.isIntersecting),
+    { rootMargin: `-${nav.offsetHeight}px 0px 0px 0px` },
   ).observe($(".hero .hero-actions"));
   const menu = $(".nav-menu");
   const sheet = $("#nav-sheet");
@@ -82,10 +84,10 @@ function prepareIntro(): void {
     return;
   }
   const reading = play("intro", true);
-  // The headline is set by the cursor; everything else arrives in cursor
-  // steps, and the dump's cursor walks to the label while the window reads.
+  // The headline is uncovered by the cursor; everything else fades in, and
+  // the dump's cursor glides to the label while the window reads.
   heroTL = G.timeline({ paused: true, defaults: { ease: EASE } });
-  const typed = typeTitle($("#hero-title"), 0.075);
+  const typed = typeTitle($("#hero-title"), 0.6);
   if (typed) heroTL.add(typed.play(), 0.05);
   heroTL
     .from(".hero-lede", { opacity: 0, ...FADE }, 0.1)
@@ -109,10 +111,10 @@ function prepareIntro(): void {
 function scrollScenes(): void {
   labelsPin(() => nav.offsetHeight);
   if (!motion()) return;
-  // Section titles: set by the cursor when they come into view; ledes
+  // Section titles: uncovered by the cursor when they come into view; ledes
   // follow with a plain fade.
   $$(".sec-title, .close-title").forEach((t) => {
-    const typed = typeTitle(t, 0.075);
+    const typed = typeTitle(t);
     if (typed)
       ScrollTrigger.create({
         trigger: t,
