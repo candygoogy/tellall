@@ -12,7 +12,7 @@ import { cleanScenes, initClean } from "./view/clean.ts";
 import { initDrop } from "./view/drop.ts";
 import { initHidden, hiddenScenes } from "./view/hidden.ts";
 import { initTilt, walkDump } from "./view/hero.ts";
-import { initLabels, labelsPin, labelsScenes } from "./view/labels.ts";
+import { initLabels, labelsScenes } from "./view/labels.ts";
 import { initPaste } from "./view/paste.ts";
 import { initPrivacy, privacyScenes } from "./view/privacy.ts";
 import {
@@ -109,7 +109,6 @@ function prepareIntro(): void {
 }
 
 function scrollScenes(): void {
-  labelsPin(() => nav.offsetHeight);
   if (!motion()) return;
   // Section titles: uncovered by the cursor when they come into view; ledes
   // follow with a plain fade.

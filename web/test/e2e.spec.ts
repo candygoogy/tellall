@@ -440,6 +440,35 @@ test("the footer links the third-party licences, and they're served", async ({
   expect(await res.text()).toContain("Third-party code in tellall's page");
 });
 
+test("the AI label card: each question beside its rows and what tellall says; pointing at one lights its rows", async ({
+  page,
+}) => {
+  const expected = await fileReport("ai/chatgpt-image.png");
+  const sentences = expected.findings
+    .filter((f) => f.group === "ai-label")
+    .slice(0, 3)
+    .map((f) => f.sentence);
+  expect(sentences).toHaveLength(3);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?still");
+  const groups = page.locator("#label-card .lc-group");
+  await expect(groups).toHaveCount(3);
+  for (const [i, sentence] of sentences.entries()) {
+    const said = groups.nth(i).locator(".lc-said");
+    await expect(said).toBeVisible();
+    await expect(said).toHaveText(sentence);
+  }
+  // Nothing is lit until a group is pointed at; then only its rows are.
+  await expect(page.locator("#label-card .lc-fields .is-hot")).toHaveCount(0);
+  await groups.nth(1).locator(".lc-note-title").hover();
+  const rows = groups.nth(1).locator(".lc-fields dt, .lc-fields dd");
+  expect(await rows.count()).toBeGreaterThan(0);
+  for (const row of await rows.all()) await expect(row).toHaveClass(/is-hot/);
+  await expect(page.locator("#lc-time")).toHaveClass(/is-hot/);
+  await expect(groups.nth(0).locator(".lc-fields .is-hot")).toHaveCount(0);
+  await expect(groups.nth(2).locator(".lc-fields .is-hot")).toHaveCount(0);
+});
+
 test("390 px: no horizontal scroll", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?still");

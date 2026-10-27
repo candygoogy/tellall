@@ -1,20 +1,13 @@
-// "An AI image carries a signed label.": three steps (who signed it, what
-// made it and when, what it says about the pixels) light the matching rows
-// of an example label card. On wide screens the section pins and scrolling
-// walks the steps. Every row and sentence comes from the engine's report.
+// "An AI image carries a signed label.": an example label card, annotated.
+// Each of its three groups (who signed it, what made it and when, what it
+// says about the pixels) puts the question beside the rows that answer it
+// and what tellall says about them; pointing at or focusing a group lights
+// its rows. Every row and sentence comes from the engine's report.
 import type { Report } from "@tellall/engine";
 import examples from "virtual:examples";
 import { $, $$, applyGeometry, esc, fmt, tabs } from "../dom.ts";
 import type { ExampleFile } from "../example-types.ts";
-import {
-  FILL,
-  G,
-  POP,
-  ScrollTrigger,
-  decode,
-  motion,
-  swap,
-} from "../motion.ts";
+import { FILL, G, POP, ScrollTrigger, decode, swap } from "../motion.ts";
 import { attachCursor, buildBar, zoomRange } from "./anatomy.ts";
 
 interface Action {
@@ -27,7 +20,7 @@ interface Action {
 interface Row {
   k: string;
   v: string;
-  step: number;
+  group: number;
   code?: boolean;
 }
 interface Model {
@@ -66,8 +59,8 @@ function labelModel(ex: ExampleFile): Model {
   );
   const label = report.anatomy.find((p) => p.part === "label");
   const rows: Row[] = [
-    { k: "Signed by", v: get("Signer") ?? "", step: 0 },
-    { k: "Certificate issued by", v: cn.replace(/\\,/g, ","), step: 0 },
+    { k: "Signed by", v: get("Signer") ?? "", group: 0 },
+    { k: "Certificate issued by", v: cn.replace(/\\,/g, ","), group: 0 },
     {
       k: "Signature",
       v:
@@ -76,10 +69,10 @@ function labelModel(ex: ExampleFile): Model {
           : ex.signatureMatches === false
             ? "Doesn't match this file"
             : "",
-      step: 0,
+      group: 0,
     },
-    { k: "Tool", v: agent ?? get("claim_generator_info") ?? "", step: 1 },
-    { k: "Says it was", v: source ? `made by AI (${source})` : "", step: 1 },
+    { k: "Tool", v: agent ?? get("claim_generator_info") ?? "", group: 1 },
+    { k: "Says it was", v: source ? `made by AI (${source})` : "", group: 1 },
     {
       k: "Watermark",
       v: wm
@@ -88,7 +81,7 @@ function labelModel(ex: ExampleFile): Model {
           : wm.action
         : "",
       code: !!wm && !wm.description,
-      step: 2,
+      group: 2,
     },
   ].filter((r) => r.v);
   return {
@@ -111,8 +104,6 @@ const LM: Record<string, Model> = {
   gemini: labelModel(examples.files.gemini),
 };
 let lmKey = "chatgpt";
-let step = 0;
-let pin: ScrollTrigger | null = null;
 const model = () => LM[lmKey] as Model;
 
 /** The label's first 16 bytes, read from the fixture. */
@@ -139,6 +130,7 @@ function renderTimeline(m: Model): void {
   const timed = m.actions
     .map((a) => ({ ...a, t: a.when ? secs(a.when) : null }))
     .filter((a): a is Action & { t: { s: number; hms: string } } => !!a.t);
+  box.classList.toggle("is-list", !timed.length);
   if (!timed.length) {
     box.innerHTML = `<ul class="actions-list">${m.actions.map((a) => `<li><span><code>${esc(a.action)}</code>${a.description ? ` · ${esc(a.description)}` : ""}</span></li>`).join("")}</ul><p class="tl-note tl-note-gap">This label lists its steps without times.</p>`;
     return;
@@ -181,7 +173,7 @@ function renderTimeline(m: Model): void {
   applyGeometry(box);
 }
 
-function renderLabel(animate: boolean): void {
+function renderLabel(): void {
   const m = model();
   $("#lc-where").innerHTML = m.where;
   const rep = m.ex.report;
@@ -198,107 +190,77 @@ function renderLabel(animate: boolean): void {
   $("#lc-strip-cap").textContent = zoom
     ? `The first ${fmt(zoom[1])} bytes of ${m.ex.name}, enlarged; the label is in blue.`
     : `${m.ex.name}, to scale; the label is in blue.`;
-  $("#lc-fields").innerHTML = m.rows
-    .map(
-      (r) =>
-        `<dt data-step="${r.step}">${esc(r.k)}</dt><dd data-step="${r.step}">${r.code ? `<code>${esc(r.v)}</code>` : esc(r.v)}</dd>`,
-    )
-    .join("");
+  $$(".lc-group").forEach((g, i) => {
+    const rows = m.rows.filter((r) => r.group === i);
+    const said = m.sentences[i] ?? "";
+    const dl = $(".lc-fields", g);
+    dl.innerHTML = rows
+      .map(
+        (r) =>
+          `<dt>${esc(r.k)}</dt><dd>${r.code ? `<code>${esc(r.v)}</code>` : esc(r.v)}</dd>`,
+      )
+      .join("");
+    dl.hidden = !rows.length;
+    $(".lc-said", g).textContent = said;
+    $(".lc-sentence", g).hidden = !said;
+    // The timeline is the second group's evidence too.
+    const shown = rows.length || said || (i === 1 && m.actions.length);
+    g.hidden = !shown;
+  });
   renderTimeline(m);
-  applyStep(animate);
+  $("#lc-time").hidden = !m.actions.length;
 }
 
-function applyStep(animate: boolean): void {
-  const m = model();
-  $$("#lc-fields [data-step]").forEach((el) => {
-    const on = Number(el.dataset["step"]) === step;
-    el.classList.toggle("is-dim", !on);
-    el.classList.toggle("is-hot", on);
+/** Lights one group's rows (and, for the second, its timeline), or none:
+ * the group the mouse points at, else the one the keyboard is on. */
+let pointed: Element | null = null;
+function light(): void {
+  const group = pointed ?? document.querySelector(".lc-group:focus-visible");
+  $$(".lc-group").forEach((g) => {
+    const on = g === group;
+    g.classList.toggle("is-hot", on);
+    $$(".lc-fields dt, .lc-fields dd", g).forEach((el) =>
+      el.classList.toggle("is-hot", on),
+    );
   });
-  $("#lc-time").classList.toggle("is-hot", step === 1);
-  const sent = $("#lc-sentence");
-  const text = m.sentences[step] ?? "";
-  if (sent.textContent !== text) {
-    if (animate) {
-      swap(sent, () => {
-        sent.textContent = text;
-      });
-    } else sent.textContent = text;
-  }
-  $$(".step").forEach((b) =>
-    b.setAttribute("aria-pressed", String(Number(b.dataset["step"]) === step)),
+  $("#lc-time").classList.toggle(
+    "is-hot",
+    group?.getAttribute("data-group") === "1",
   );
-  const mb = document.querySelector(".step-mobile-body");
-  const body = $$(".step-body")[step];
-  if (mb && body) mb.textContent = body.textContent;
 }
 
 const announce = () => {
-  $("#lc-live").textContent = model().sentences[step] ?? "";
+  const m = model();
+  $("#lc-live").textContent = [`${m.ex.name}.`, ...m.sentences].join(" ");
 };
 
 export function initLabels(): void {
-  const mb = document.createElement("p");
-  mb.className = "step-mobile-body";
-  $(".card-col").prepend(mb);
   tabs($("#label-card .tabs"), (t) => {
     lmKey = t.dataset["file"] ?? "chatgpt";
     $("#lc-body").setAttribute("aria-labelledby", t.id);
     swap($("#lc-body"), () => {
-      renderLabel(true);
+      renderLabel();
+      light();
       decode($("#lc-where"), 0.4);
     });
     announce();
   });
-  $$(".step").forEach((b) =>
-    b.addEventListener("click", () => {
-      step = Number(b.dataset["step"]);
-      applyStep(true);
-      announce();
-      if (pin) {
-        const y = pin.start + ((step + 0.5) / 3) * (pin.end - pin.start);
-        window.scrollTo({ top: y, behavior: motion() ? "smooth" : "auto" });
-      }
-    }),
-  );
-  renderLabel(false);
-}
-
-/** On wide screens the section pins while scrolling walks the steps. Made
- * first, so every trigger below it is measured after its pin spacing. */
-export function labelsPin(navHeight: () => number): void {
-  if (!motion()) {
-    step = 0;
-    applyStep(false);
-    return;
-  }
-  G.matchMedia().add("(min-width: 1024px)", () => {
-    const fill = $("#steps-fill");
-    const grid = $(".labels-grid");
-    pin = ScrollTrigger.create({
-      trigger: grid,
-      // Pinned in the middle of the screen when it fits, under the nav
-      // when it doesn't.
-      start: () => {
-        const room = window.innerHeight - navHeight() - grid.offsetHeight;
-        return `top ${navHeight() + Math.max(32, room / 2)}px`;
-      },
-      end: "+=110%",
-      pin: true,
-      anticipatePin: 1,
-      onUpdate: (self) => {
-        G.set(fill, { scaleY: self.progress });
-        const i = Math.min(2, Math.floor(self.progress * 3));
-        if (i !== step) {
-          step = i;
-          applyStep(true);
-        }
-      },
+  const fine = window.matchMedia("(hover: hover) and (pointer: fine)");
+  $$(".lc-group").forEach((g) => {
+    g.addEventListener("pointerenter", (e) => {
+      if (!fine.matches || e.pointerType !== "mouse") return;
+      pointed = g;
+      light();
     });
-    return () => {
-      pin = null;
-    };
+    g.addEventListener("pointerleave", () => {
+      if (pointed !== g) return;
+      pointed = null;
+      light();
+    });
+    g.addEventListener("focus", light);
+    g.addEventListener("blur", () => requestAnimationFrame(light));
   });
+  renderLabel();
 }
 
 export function labelsScenes(): void {
@@ -314,10 +276,16 @@ export function labelsScenes(): void {
         stagger: 0.08,
         ease: FILL,
       });
-      G.from($$("#lc-fields dt, #lc-fields dd"), {
+      G.from($$("#lc-body .lc-fields dt, #lc-body .lc-fields dd"), {
         opacity: 0,
         ...POP,
         stagger: 0.03,
+      });
+      G.from($$("#lc-body .lc-sentence:not([hidden])"), {
+        opacity: 0,
+        ...POP,
+        delay: 0.3,
+        stagger: 0.12,
       });
     },
   });
