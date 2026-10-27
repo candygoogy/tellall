@@ -1,8 +1,8 @@
 // "An AI image carries a signed label.": an example label card, annotated.
 // Each of its three groups (who signed it, what made it and when, what it
 // says about the pixels) puts the question beside the rows that answer it
-// and what tellall says about them; pointing at or focusing a group lights
-// its rows. Every row and sentence comes from the engine's report.
+// and what tellall says about them; pointing at a group lights its rows.
+// Everything is on show, so the keyboard needs no stop here. Every row and sentence comes from the engine's report.
 import type { Report } from "@tellall/engine";
 import examples from "virtual:examples";
 import { $, $$, applyGeometry, esc, fmt, tabs } from "../dom.ts";
@@ -211,11 +211,11 @@ function renderLabel(): void {
   $("#lc-time").hidden = !m.actions.length;
 }
 
-/** Lights one group's rows (and, for the second, its timeline), or none:
- * the group the mouse points at, else the one the keyboard is on. */
+/** Lights the rows (and, for the second, the timeline) of the group the
+ * mouse points at, or none. */
 let pointed: Element | null = null;
 function light(): void {
-  const group = pointed ?? document.querySelector(".lc-group:focus-visible");
+  const group = pointed;
   $$(".lc-group").forEach((g) => {
     const on = g === group;
     g.classList.toggle("is-hot", on);
@@ -257,8 +257,6 @@ export function initLabels(): void {
       pointed = null;
       light();
     });
-    g.addEventListener("focus", light);
-    g.addEventListener("blur", () => requestAnimationFrame(light));
   });
   renderLabel();
 }
