@@ -13,13 +13,14 @@ npx tellall clean [options] [--] <file|dir> ...
     -o, --out <dir>              where to write (default: next to each file, name.clean.ext)
     --remove-labels              also remove AI labels (C2PA, AI-source tags); files you own
     --force                      replace .clean copies already there
+    --always                     also write a copy when nothing is removed
 npx tellall -h, --help           this text
 npx tellall -v, --version        the version number
 ```
 
-Put `--` before the paths so a name starting with `-` isn't read as an option. Folders are read all the way down, except links, `node_modules` and folders whose names start with a dot; tellall says on stderr how many it skipped. `clean` doesn't clean its own earlier copies again: a `photo.clean.jpg` next to a `photo.jpg` is skipped.
+Put `--` before the paths so a name starting with `-` isn't read as an option. Folders are read all the way down, except links, `node_modules` and folders whose names start with a dot; tellall says on stderr how many it skipped. `clean` doesn't clean its own earlier copies again: a `photo.clean.jpg` next to a `photo.jpg` is skipped. A file with nothing to remove gets no copy unless you add `--always`, and a copy already there is left as it is unless you add `--force`; neither is an error.
 
-Exit codes: 0 done; 1 `--fail-on` matched; 2 usage, read or write error, also when `clean` can't make a copy (a damaged file, or a copy already there without `--force`). A file of a kind tellall can't read is listed and doesn't change the exit code. Needs Node 20.19 or later.
+Exit codes: 0 done; 1 `--fail-on` matched; 2 usage, read or write error, also when `clean` can't make a copy of a damaged file. A file of a kind tellall can't read is listed and doesn't change the exit code. Needs Node 20.19 or later.
 
 ```
 $ npx tellall -- chatgpt-image.png

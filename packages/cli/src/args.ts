@@ -18,6 +18,7 @@ export type Args =
       out: string | null;
       removeLabels: boolean;
       force: boolean;
+      always: boolean;
     };
 
 export const SUMMARY =
@@ -42,6 +43,7 @@ Usage:
     -o, --out <dir>              where to write (default: next to each file, name.clean.ext)
     --remove-labels              also remove AI labels (C2PA, AI-source tags); files you own
     --force                      replace .clean copies already there
+    --always                     also write a copy when nothing is removed
   tellall -h, --help             this text
   tellall -v, --version          the version number
 
@@ -54,10 +56,12 @@ Put -- before the paths so a name starting with "-" isn't read as an option.
 Folders are read all the way down, except links, node_modules and folders
 whose names start with a dot; tellall says how many it skipped.
 
+A file with nothing to remove gets no copy unless --always; a copy already
+there is left as it is unless --force.
+
 Exit codes: 0 done; 1 --fail-on matched; 2 usage, read or write error, also
-when clean can't make a copy (a damaged file, or a copy already there without
---force). A file of a kind tellall can't read is listed and doesn't change
-the exit code.
+when clean can't make a copy of a damaged file. A file of a kind tellall
+can't read is listed and doesn't change the exit code.
 `;
 
 export class UsageError extends Error {
@@ -105,6 +109,7 @@ const CLEAN_FLAGS: readonly string[] = [
   "--out",
   "--remove-labels",
   "--force",
+  "--always",
 ];
 
 /** The arguments after `node tellall.js`. Throws UsageError. */
@@ -211,6 +216,7 @@ function parse(argv: string[]): Args {
       out,
       removeLabels: flags.has("--remove-labels"),
       force: flags.has("--force"),
+      always: flags.has("--always"),
     };
   }
   if (paths.filter((p) => p === "-").length > 1) {

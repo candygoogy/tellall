@@ -1,7 +1,8 @@
 // tellall on the command line (spec §5.2): reports on files, folders and
 // stdin, or clean copies of files. Exit 0 done, 1 --fail-on matched, 2 a
-// usage, read or write error (clean that can't make a copy included). A
-// file of a kind tellall can't read is listed and leaves the code alone.
+// usage, read or write error (clean that can't make a copy of a damaged
+// file included). A file of a kind tellall can't read, a file with nothing
+// to remove and a copy already there are listed and leave the code alone.
 import {
   clean,
   inspect,
@@ -382,7 +383,7 @@ function makeFolder(dir: string) {
 }
 
 /** Clean copies, never over an original, over an earlier copy only with
- * --force. */
+ * --force; none for a file with nothing to remove, unless --always. */
 async function runClean(args: Extract<Args, { command: "clean" }>) {
   if (args.out) {
     let outStat;
@@ -397,7 +398,8 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
     }
   }
   let labelsRemoved = false;
-  /** Copies that were already there, said once at the end. */
+  /** Copies that were already there, left as they are and said once at
+   * the end. */
   const there: string[] = [];
   const print = (name: string, under: string[]) =>
     out(lead() + block(name, under));
@@ -425,12 +427,12 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
         }
         continue;
       }
-      let size = 0;
+      let original: Uint8Array = new Uint8Array(0);
       const result = await withBytes<Cleaned>(
         entry,
         "clean",
         (bytes) => {
-          size = bytes.length;
+          original = bytes;
           return clean(
             { kind: "file", name, bytes },
             { removeLabels: args.removeLabels },
@@ -446,6 +448,17 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
         } else {
           problem(`${entry.shown}: ${lowerFirst(result.notes.join(" "))}`);
         }
+        continue;
+      }
+      const output = result.output as Uint8Array;
+      // The engine's notes; the one about labels comes once, at the end.
+      const notes = result.notes.filter((n) => n !== words.clean.labelsRemoved);
+      // Nothing removed: a copy would be the original, byte for byte.
+      if (!args.always && Buffer.compare(output, original) === 0) {
+        const said = notes.map((n) =>
+          n === words.clean.labelKeeps ? words.clean.labelKeepsNoCopy : n,
+        );
+        print(entry.shown, ["No copy written.", ...said.map((n) => `· ${n}`)]);
         continue;
       }
 
@@ -468,10 +481,9 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
         if (statSync(target, { throwIfNoEntry: false })?.isDirectory()) {
           throw new Said("a folder of that name is in the way");
         }
-        writeCopy(target, result.output as Uint8Array, args.force);
+        writeCopy(target, output, args.force);
       } catch (e) {
         if (codeOf(e) === "EEXIST") {
-          failed = true;
           there.push(shownTarget);
         } else {
           problem(`couldn't write ${shownTarget}: ${why(e)}`);
@@ -481,13 +493,8 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
       written.add(key);
       const newId = idOf(target);
       if (newId !== null) writtenIds.add(newId);
-      // The notice about labels comes once, at the end.
-      const notes = result.notes.filter((n) => n !== words.clean.labelsRemoved);
       if (notes.length < result.notes.length) labelsRemoved = true;
-      const gone = removedLine(
-        result.removed,
-        size - (result.output as Uint8Array).length,
-      );
+      const gone = removedLine(result.removed, original.length - output.length);
       print(entry.shown, [
         `Wrote ${shownTarget}`,
         ...(gone ? [gone] : []),
@@ -497,10 +504,12 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
   }
   if (labelsRemoved) out(`${lead()}${words.clean.labelsRemoved}\n`);
   if (there.length === 1) {
-    say(`${there[0]} is already there; add --force to replace it.`);
+    say(
+      `${there[0]} is already there, left as it is; add --force to replace it.`,
+    );
   } else if (there.length) {
     say(
-      `${there.length} clean copies already there; add --force to replace them.`,
+      `${there.length} clean copies already there, left as they are; add --force to replace them.`,
     );
   }
   saySkipped();

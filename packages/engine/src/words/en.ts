@@ -308,6 +308,10 @@ export const en = {
       "tellall can't read this kind of file yet, so it can't make a clean copy.",
     labelKeeps:
       "The AI label was kept, and the personal data it holds stays in the copy with it.",
+    /** labelKeeps, when the command line writes no copy as nothing else
+     * was removed. */
+    labelKeepsNoCopy:
+      "The only personal data is inside the AI label, which a clean copy keeps. --remove-labels takes both out.",
     gainMapDropped:
       "The HDR gain map couldn't be kept, so on an HDR screen the copy looks less bright than the original.",
     partial:

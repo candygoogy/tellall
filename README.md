@@ -77,7 +77,7 @@ Exit codes: 0 done; 1 `--fail-on` matched; 2 usage, read or write error, also wh
 ```
 $ npx tellall clean chatgpt-image.png gps.jpg
 chatgpt-image.png
-  Wrote chatgpt-image.clean.png
+  No copy written.
   · Nothing private to remove.
 
 gps.jpg

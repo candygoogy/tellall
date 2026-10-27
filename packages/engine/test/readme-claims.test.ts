@@ -118,7 +118,8 @@ test.each(cleans.map((e) => [e.args.join(" "), e] as const))(
       const copy = file.name.replace(/(\.[^.]+)$/, ".clean$1");
       // The CLI's "Removed …: N bytes." line, when something was removed:
       // its size is the original's minus the copy's.
-      const size = readFileSync(url).length - result.output.length;
+      const original = readFileSync(url);
+      const size = original.length - result.output.length;
       const gone = file.lines.filter((l) => l.startsWith("Removed "));
       expect(gone.length, file.name).toBe(result.removed.length ? 1 : 0);
       if (gone[0]) {
@@ -129,7 +130,13 @@ test.each(cleans.map((e) => [e.args.join(" "), e] as const))(
       expect(
         file.lines.filter((l) => !l.startsWith("Removed ")),
         file.name,
-      ).toEqual([`Wrote ${copy}`, ...notes.map((n) => `· ${n}`)]);
+      ).toEqual([
+        // A copy that would be the original, byte for byte, isn't written.
+        Buffer.compare(result.output as Uint8Array, original) === 0
+          ? "No copy written."
+          : `Wrote ${copy}`,
+        ...notes.map((n) => `· ${n}`),
+      ]);
     }
     expect(example.after).toEqual(removed ? [words.clean.labelsRemoved] : []);
   },

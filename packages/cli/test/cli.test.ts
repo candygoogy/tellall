@@ -165,32 +165,64 @@ describe("tellall clean", () => {
       "--remove-labels",
       join(dir, "chatgpt-image.png"),
     ]);
-    expect(again.code).toBe(2);
+    expect(again.code).toBe(0);
+    expect(again.err).toContain(
+      "chatgpt-image.clean.png is already there, left as it is; add --force to replace it.",
+    );
     expect(readFileSync(join(dir, "chatgpt-image.clean.png"))).toEqual(copy);
     expect(statSync(join(dir, "chatgpt-image.clean.png")).mtimeMs).toBe(before);
 
-    // --force writes it again.
+    // Without --remove-labels nothing is removed: --force alone writes no
+    // copy, --always does.
     const forced = tellall([
       "clean",
       "--force",
       join(dir, "chatgpt-image.png"),
     ]);
     expect(forced.code).toBe(0);
-    expect(
-      readFileSync(join(dir, "chatgpt-image.clean.png")).includes("caBX"),
-    ).toBe(true);
-    expect(forced.out).not.toContain(NOTICE);
+    expect(forced.out).toContain("No copy written.");
+    expect(readFileSync(join(dir, "chatgpt-image.clean.png"))).toEqual(copy);
+    const always = tellall([
+      "clean",
+      "--force",
+      "--always",
+      join(dir, "chatgpt-image.png"),
+    ]);
+    expect(always.code).toBe(0);
+    expect(readFileSync(join(dir, "chatgpt-image.clean.png"))).toEqual(
+      original,
+    );
+    expect(always.out).not.toContain(NOTICE);
+  });
+
+  test("nothing to remove: no copy and exit 0; --always writes one", () => {
+    const dir = folder("unchanged", { "chatgpt-image.png": CHATGPT });
+    const file = join(dir, "chatgpt-image.png");
+    const r = tellall(["clean", file]);
+    expect(r.code).toBe(0);
+    expect(r.err).toBe("");
+    expect(r.out).toMatch(
+      /chatgpt-image\.png\n {2}No copy written\.\n {2}· Nothing private to remove\.\n$/,
+    );
+    expect(readdirSync(dir)).toEqual(["chatgpt-image.png"]);
+
+    const always = tellall(["clean", "--always", file]);
+    expect(always.code).toBe(0);
+    expect(always.out).toContain("Wrote ");
+    expect(readFileSync(join(dir, "chatgpt-image.clean.png"))).toEqual(
+      readFileSync(CHATGPT),
+    );
   });
 
   test("-o keeps a folder's structure and skips clean copies", () => {
-    const dir = folder("tree", { "a.png": CHATGPT });
-    folder("tree/sub", { "b.png": CHATGPT, "b.clean.png": CHATGPT });
+    const dir = folder("tree", { "a.jpg": GPS });
+    folder("tree/sub", { "b.jpg": GPS, "b.clean.jpg": GPS });
     const out = join(tmp, "tree-out");
     const r = tellall(["clean", "-o", out, dir]);
     expect(r.code).toBe(0);
-    expect(statSync(join(out, "a.clean.png")).isFile()).toBe(true);
-    expect(statSync(join(out, "sub/b.clean.png")).isFile()).toBe(true);
-    expect(() => statSync(join(out, "sub/b.clean.clean.png"))).toThrow();
+    expect(statSync(join(out, "a.clean.jpg")).isFile()).toBe(true);
+    expect(statSync(join(out, "sub/b.clean.jpg")).isFile()).toBe(true);
+    expect(() => statSync(join(out, "sub/b.clean.clean.jpg"))).toThrow();
   });
 
   test("stdin can't be cleaned", () => {
@@ -254,14 +286,16 @@ describe("clean: writing copies", () => {
     expect(leftovers(dir)).toEqual([]);
   });
 
-  test("a copy already there is an error on stderr, and nothing is left behind", () => {
+  test("a copy already there is left as it is, said on stderr, exit 0", () => {
     const dir = folder("again", { "gps.jpg": GPS });
     expect(tellall(["clean", join(dir, "gps.jpg")]).code).toBe(0);
     const before = readFileSync(join(dir, "gps.clean.jpg"));
     const r = tellall(["clean", join(dir, "gps.jpg")]);
-    expect(r.code).toBe(2);
+    expect(r.code).toBe(0);
     expect(r.out).toBe("");
-    expect(r.err).toMatch(/gps\.clean\.jpg is already there; add --force/);
+    expect(r.err).toMatch(
+      /^tellall: \S+gps\.clean\.jpg is already there, left as it is; add --force to replace it\.\n$/,
+    );
     expect(readFileSync(join(dir, "gps.clean.jpg"))).toEqual(before);
     expect(leftovers(dir)).toEqual([]);
   });
@@ -425,6 +459,7 @@ describe("arguments", () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain("tellall -h, --help");
     expect(r.out).toContain("tellall -v, --version");
+    expect(r.out).toContain("--always");
     expect(r.out).toContain(
       "Exit codes: 0 done; 1 --fail-on matched; 2 usage, read or write error",
     );
@@ -495,10 +530,11 @@ describe("clean: what was removed", () => {
     );
     expect(m?.[1]).toContain("location");
     expect(Number(m?.[2]?.replaceAll(",", ""))).toBe(bytes);
-    // Nothing removed: no Removed line, the note says so.
+    // Nothing removed: no copy, no Removed line, the note says why.
     expect(r.out).toMatch(
-      /chatgpt-image\.png\n {2}Wrote .*\n {2}· Nothing private/,
+      /chatgpt-image\.png\n {2}No copy written\.\n {2}· Nothing private/,
     );
+    expect(() => statSync(join(dir, "chatgpt-image.clean.png"))).toThrow();
   });
 
   test("a re-run says copies are already there in one line", () => {
@@ -506,10 +542,10 @@ describe("clean: what was removed", () => {
     const files = ["a.jpg", "b.jpg", "c.jpg"].map((f) => join(dir, f));
     expect(tellall(["clean", ...files]).code).toBe(0);
     const r = tellall(["clean", ...files]);
-    expect(r.code).toBe(2);
+    expect(r.code).toBe(0);
     expect(r.out).toBe("");
     expect(r.err).toBe(
-      "tellall: 3 clean copies already there; add --force to replace them.\n",
+      "tellall: 3 clean copies already there, left as they are; add --force to replace them.\n",
     );
   });
 
