@@ -60,6 +60,14 @@ const HEIC = /\.(heic|heif)$/i;
 /** What an empty file's result says under "tellall couldn't read this file." */
 const EMPTY = "The file is empty: it has no bytes to read.";
 
+/** The largest text file read as text: a few hundred pages, read in well
+ * under a second. Larger ones get a row that says so. */
+const TEXT_MOST = 2 * 1024 * 1024;
+const TOO_BIG =
+  "This text file is larger than 2 MB, more than tellall reads at once. Paste the part you want to check.";
+/** Files that get a row with a sentence instead of a reading. */
+const refused = new WeakMap<File, string>();
+
 /** Said once a batch of several is read: "Read 60 files: 10 with AI
  * labels, 3 couldn't be read." The counts follow the sidebar's dots. */
 function batchLine(items: Item[], left: number): string {
@@ -105,7 +113,13 @@ function looksLikeImage(b: Uint8Array): boolean {
  * anything with a NUL byte in it). */
 async function textOf(f: File): Promise<string | null> {
   const bytes = new Uint8Array(await f.arrayBuffer());
-  if (looksLikeImage(bytes) || bytes.includes(0)) return null;
+  if (looksLikeImage(bytes)) return null;
+  // UTF-16, by its byte order mark; otherwise UTF-8, and no NUL bytes.
+  if (bytes[0] === 0xff && bytes[1] === 0xfe)
+    return new TextDecoder("utf-16le").decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff)
+    return new TextDecoder("utf-16be").decode(bytes);
+  if (bytes.includes(0)) return null;
   return new TextDecoder().decode(bytes);
 }
 
@@ -121,6 +135,11 @@ export async function readDropped(files: FileList | File[]): Promise<void> {
   const rest: File[] = [];
   const texts: string[] = [];
   for (const f of Array.from(files)) {
+    if (textish(f) && f.size > TEXT_MOST) {
+      refused.set(f, TOO_BIG);
+      rest.push(f);
+      continue;
+    }
     const plain = textish(f) && readAsText ? await textOf(f) : null;
     if (plain === null) rest.push(f);
     else texts.push(plain);
@@ -144,7 +163,7 @@ export async function readFiles(files: FileList | File[]): Promise<void> {
     : "";
   note.hidden = !left;
   const items: Item[] = list.map((f) =>
-    f.size > 0
+    f.size > 0 && !refused.has(f)
       ? {
           id: nextId(),
           live: true,
@@ -159,9 +178,9 @@ export async function readFiles(files: FileList | File[]): Promise<void> {
           live: true,
           kind: "file",
           name: f.name,
-          size: 0,
+          size: f.size,
           state: "error",
-          error: EMPTY,
+          error: refused.get(f) ?? EMPTY,
         },
   );
   // Newest batch first, each in the order it was chosen.

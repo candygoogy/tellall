@@ -937,6 +937,38 @@ test("a dropped .txt is read as text; one whose bytes are a picture, as the pict
   await expect(page.locator("#r-view .an-main")).toBeVisible();
 });
 
+test("a text file over 2 MB gets a row that says so; a UTF-16 one is read", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  const utf16 = Buffer.concat([
+    Buffer.from([0xff, 0xfe]),
+    Buffer.from("Hello​ there", "utf16le"),
+  ]);
+  await drop(page, [
+    {
+      name: "big.txt",
+      b64: Buffer.alloc(3 * 1024 * 1024, "a").toString("base64"),
+      type: "text/plain",
+    },
+    { name: "wide.txt", b64: utf16.toString("base64"), type: "text/plain" },
+  ]);
+  await expect(page.locator("#side-live-list .fi-name")).toHaveText([
+    "big.txt",
+    "Hello there",
+  ]);
+  await expect(page.locator("#r-view")).toContainText(
+    "This text file is larger than 2 MB",
+  );
+  await expect(
+    page.locator("#side-live-list .file-item").first().locator(".fi-dot"),
+  ).toHaveClass(/dot-error/);
+  await page.locator("#side-live-list .file-item").nth(1).click();
+  await expect(page.locator("#r-view .rv-headline")).toHaveText(
+    "This text has 1 hidden character.",
+  );
+});
+
 test("a batch is listed in the order it was chosen, its first file shown", async ({
   page,
 }) => {
