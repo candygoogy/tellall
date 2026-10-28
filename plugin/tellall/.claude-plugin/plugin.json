@@ -1,6 +1,6 @@
 {
   "name": "tellall",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "See in plain sentences what an image or a copied text gives away about you (AI labels, location, camera, dates, hidden characters), and make clean copies that keep AI labels.",
   "author": { "name": "candygoogy" },
   "license": "MIT",
