@@ -19,12 +19,13 @@ export const safe = (s: string) =>
 
 /** The colour of a kind of result. Basic ANSI colours only, the ones that
  * read on dark and light backgrounds alike (yellow is the weakest on
- * light ones, so it's kept for what tellall couldn't read). */
+ * light ones, so it's kept for what tellall couldn't read). Nothing found
+ * stays uncoloured: it proves nothing (spec 5.4), so it mustn't look like
+ * an all-clear. */
 export type Tone = "label" | "private" | "clear" | "unread";
-const SGR: Record<Tone, number> = {
+const SGR: Partial<Record<Tone, number>> = {
   label: 35, // magenta
   private: 31, // red
-  clear: 32, // green
   unread: 33, // yellow
 };
 
@@ -37,7 +38,10 @@ export interface Paint {
  * carries an escape. */
 export const paint = (on: boolean): Paint => ({
   bold: (s) => (on ? `\x1b[1m${s}\x1b[22m` : s),
-  tone: (tone, s) => (on ? `\x1b[${SGR[tone]}m${s}\x1b[39m` : s),
+  tone: (tone, s) => {
+    const sgr = SGR[tone];
+    return on && sgr ? `\x1b[${sgr}m${s}\x1b[39m` : s;
+  },
 });
 
 const PLAIN = paint(false);

@@ -94,7 +94,7 @@ Text can be UTF-8, or UTF-16 with a byte order mark; tellall says so if it isn't
 
 Reports go to stdout. Errors and skip notes go to stderr. With `clean -`, stdout is the clean text alone and everything else goes to stderr.
 
-On a terminal, file names are bold and each headline and bullet takes the colour of its kind: magenta for an AI label, red for personal data and hidden characters, green for nothing found, yellow for a file tellall can't read. There's no colour when stdout isn't a terminal, with `--json`, with `--no-color` or when `NO_COLOR` is set; `FORCE_COLOR=1` turns it on where stdout isn't a terminal.
+On a terminal, file names are bold and each headline and bullet takes the colour of its kind: magenta for an AI label, red for personal data and hidden characters, yellow for a file tellall can't read; nothing found stays uncoloured, as it proves nothing. There's no colour when stdout isn't a terminal, with `--json`, with `--no-color` or when `NO_COLOR` is set; `FORCE_COLOR=1` turns it on where stdout isn't a terminal.
 
 ## Clean copies
 
