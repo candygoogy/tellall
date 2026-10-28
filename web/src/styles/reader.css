@@ -59,6 +59,33 @@
 /* the legend rides in the foot, above the buttons, so a long list never scrolls it out of sight */
 .side-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 2px; }
 .side-legend span { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-data); color: var(--ink-3); }
+/* "Your files": Clear beside the title; each row's × (Remove from list) stacked on the row's right edge.
+   Touch: always there, the name stopping short of it. Fine pointer: on the row's hover or focus, over the dot. */
+.side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.side-head .side-title { margin-bottom: 0; }
+.side-clear, .fi-x { border-radius: var(--r-sm); color: var(--ink-3); background: transparent; border: 1px solid transparent; transition: color 120ms linear, background-color 120ms linear, opacity 120ms linear; touch-action: manipulation; }
+.side-clear { height: 24px; padding: 0 8px; margin-right: 2px; font-size: var(--t-data); }
+.fi-row { display: grid; align-items: center; }
+.fi-row > * { grid-area: 1 / 1; }
+.fi-x { justify-self: end; display: grid; place-items: center; width: 36px; height: 36px; margin-right: 2px; }
+.fi-x .ic { width: 16px; height: 16px; }
+#side-live-list .file-item { padding-right: 40px; }
+@media (hover: hover) and (pointer: fine) {
+  #side-live-list .file-item { padding-right: 8px; }
+  .fi-x { width: 24px; height: 24px; margin-right: 1px; opacity: 0; }
+  .fi-row:is(:hover, :focus-within) .fi-x { opacity: 1; color: var(--ink-2); }
+  .fi-row:is(:hover, :focus-within) .fi-dot { opacity: 0; }
+  .side-clear:hover, .fi-row .fi-x:hover { color: var(--ink); background: var(--s4); }
+}
+/* after Clear: what went and Undo, for 5 s; the hairline under it runs the time down, and stops while it's held */
+.side-undo { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; padding: 6px 6px 6px 10px; border-radius: var(--r-sm); background: var(--s2); border: 1px solid var(--hair-3); font-size: var(--t-small); color: var(--ink-2); white-space: nowrap; overflow: hidden; }
+.side-undo::after { content: ""; position: absolute; inset: auto 0 0; height: 2px; background: var(--ink-3); transform-origin: 0 50%; animation: undo-run 5s linear forwards; }
+.side-undo.is-held::after { animation-play-state: paused; }
+@keyframes undo-run { to { transform: scaleX(0); } }
+/* the way back after a far jump to the reader (back.ts): one small button at the foot of the screen */
+.back-to { position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); z-index: 40; translate: -50% 8px; opacity: 0; box-shadow: 0 14px 32px -14px rgb(0 0 0 / 0.9), 0 0 0 1px rgb(0 0 0 / 0.6); transition: opacity 160ms var(--ease-out), translate 240ms var(--ease-out), background-color 120ms linear, border-color 120ms linear; }
+.back-to.is-on { opacity: 1; translate: -50% 0; }
+.back-to.is-up .ic { rotate: 180deg; }
 
 /* main view */
 .win-main { position: relative; min-width: 0; min-height: 0; }

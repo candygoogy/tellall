@@ -833,6 +833,110 @@ test("a file tellall can't read: the Couldn't read dot, and no file to scale", a
   );
 });
 
+test("your files: × takes one row out, and the one on screen hands over to the next", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await drop(page, [
+    fixtureDrop("photo/gps.jpg", "image/jpeg"),
+    fixtureDrop("photo/meta.png", "image/png"),
+  ]);
+  await readerShows(page, "gps.jpg");
+  await expect(page.locator("#side-live-list .dot-reading")).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  // By keyboard (Safari doesn't focus a clicked button), so the focus
+  // has somewhere to go.
+  await page.getByRole("button", { name: "Remove gps.jpg from list" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#side-live-list .fi-name")).toHaveText([
+    "meta.png",
+  ]);
+  await readerShows(page, "meta.png");
+  await expect(page.locator("#r-live")).toHaveText("Removed gps.jpg.");
+  // The focus stays on the list, on the next row's ×.
+  await expect(
+    page.getByRole("button", { name: "Remove meta.png from list" }),
+  ).toBeFocused();
+});
+
+test("your files: Clear empties the list, and Undo brings it back with the file on screen", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await drop(page, [
+    fixtureDrop("photo/gps.jpg", "image/jpeg"),
+    fixtureDrop("photo/meta.png", "image/png"),
+  ]);
+  await expect(page.locator("#side-live-list .dot-reading")).toHaveCount(0, {
+    timeout: 30_000,
+  });
+  await page.locator("#side-live-list .file-item").nth(1).click();
+  await readerShows(page, "meta.png");
+  await page.getByRole("button", { name: "Clear your files" }).click();
+  await expect(page.locator("#side-live-list .file-item")).toHaveCount(0);
+  await expect(page.locator("#side-undo")).toContainText("Cleared 2 files.");
+  await expect(page.locator("#r-group")).toHaveText("Examples");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.locator("#side-live-list .fi-name")).toHaveText([
+    "gps.jpg",
+    "meta.png",
+  ]);
+  await readerShows(page, "meta.png");
+  await expect(page.locator("#side-undo")).toBeHidden();
+  await expect(page.locator("#r-live")).toHaveText("Restored 2 files.");
+  await expect(page.locator("#dl-all")).toBeVisible();
+});
+
+test("a drop from far down the page: the jump to the reader offers the way back", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+  const before = await page.evaluate(() => scrollY);
+  await drop(page, [fixtureDrop("photo/gps.jpg", "image/jpeg")]);
+  await readerShows(page, "gps.jpg");
+  const back = page.getByRole("button", { name: "Back to where you were" });
+  await expect(back).toBeVisible();
+  expect(await page.evaluate(() => scrollY)).toBeLessThan(before / 2);
+  await back.click();
+  await expect(back).toBeHidden();
+  await expect
+    .poll(() => page.evaluate(() => scrollY))
+    .toBeGreaterThan(before - 4);
+});
+
+test("a dropped .txt is read as text; one whose bytes are a picture, as the picture", async ({
+  page,
+}) => {
+  await page.goto("/?still");
+  const words = "Shopping list​\nmilk and eggs";
+  await drop(page, [
+    {
+      name: "notes.txt",
+      b64: Buffer.from(words).toString("base64"),
+      type: "text/plain",
+    },
+    { ...fixtureDrop("photo/gps.jpg", "image/jpeg"), name: "photo.txt" },
+  ]);
+  await expect(page.locator("#side-live-list .fi-name")).toHaveText([
+    "photo.txt",
+    "Shopping list",
+  ]);
+  // The picture is read as one: its personal data found.
+  await expect(
+    page.locator("#side-live-list .file-item").first().locator(".fi-dot"),
+  ).toHaveClass(/dot-private/, { timeout: 30_000 });
+  await page.locator("#side-live-list .file-item").nth(1).click();
+  await expect(page.locator("#paste-area")).toHaveValue(words);
+  await expect(page.locator("#r-view .rv-headline")).toHaveText(
+    "This text has 1 hidden character.",
+  );
+  await page.locator("#side-live-list .file-item").first().click();
+  await readerShows(page, "photo.txt");
+  await expect(page.locator("#r-view .an-main")).toBeVisible();
+});
+
 test("a batch is listed in the order it was chosen, its first file shown", async ({
   page,
 }) => {

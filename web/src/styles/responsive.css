@@ -30,6 +30,10 @@
   .side-all { margin: 0 6px 0 0; height: 44px; }
   #side-live { display: flex; align-items: center; }
   #side-live[hidden] { display: none; }
+  /* Clear ends the row of your files; Undo stands where they were */
+  .side-head { order: 1; margin: 0; }
+  .side-clear { height: 44px; padding: 0 14px; margin: 0 0 0 6px; font-size: var(--t-small); border-color: var(--hair-2); }
+  .side-undo { flex: none; margin: 0 6px 0 0; min-height: 44px; }
   .view { position: relative; inset: auto; }
   /* the answer first, then the file to scale */
   .rv-top { order: 1; grid-template-columns: 96px 1fr; gap: 16px; padding: 18px 16px 6px; }
@@ -65,6 +69,8 @@
   *, *::before, *::after { scroll-behavior: auto !important; }
   .btn:active, .icon-btn:active { transform: none; }
   .in-view .blk, .caret, .dot-reading, .win-status.is-reading .sdot, .foot-dump.in-view i.cur { animation: none; }
+  .side-undo::after { display: none; }
+  .back-to, .back-to.is-on { translate: -50% 0; }
   .foot-dump i.cur { background: transparent; color: var(--ink); }
   .switch-thumb { transition: background-color 120ms linear; }
   .all::details-content { transition: none; }

@@ -6,7 +6,17 @@
 // index.html when the page arrives.
 import type { Report } from "@tellall/engine";
 import examples from "virtual:examples";
-import { $, $$, cleanName, esc, fmt, b64, download, maybe } from "../dom.ts";
+import {
+  $,
+  $$,
+  cleanName,
+  esc,
+  fmt,
+  b64,
+  download,
+  heldTimer,
+  maybe,
+} from "../dom.ts";
 import { read } from "../engine.ts";
 import {
   announce as say,
@@ -51,6 +61,7 @@ import {
   zoomRange,
   type Item,
 } from "./reader-html.ts";
+import { initBack, offerWayBack } from "./back.ts";
 import { chipClass, renderChips } from "./text.ts";
 
 export { hintBlockHTML, hintHTML, type Item } from "./reader-html.ts";
@@ -480,8 +491,12 @@ function syncReplay(): void {
 /** The current row in view inside the sidebar (a column on wide screens,
  * a swipe row on phones), never scrolling the page. */
 export function revealCurrent(): void {
+  revealInSide(maybe(`.side .file-item[aria-current="true"]`));
+}
+
+/** Something in the sidebar in view inside it, never scrolling the page. */
+function revealInSide(b: HTMLElement | null): void {
   const side = $(".side");
-  const b = maybe(`.file-item[aria-current="true"]`, side);
   if (!b || !b.offsetParent) return;
   const pad = 12;
   let left = side.scrollLeft;
@@ -831,6 +846,8 @@ interface Row {
   /** The thumbnail's slot, and the picture it shows. */
   thumb: HTMLElement;
   src?: string;
+  /** Remove from list. */
+  x: HTMLButtonElement;
 }
 const rows = new Map<Item, Row>();
 
@@ -862,10 +879,12 @@ function setThumb(row: Row, src: string | undefined): void {
 
 function liveRow(item: Item): Row {
   const li = document.createElement("li");
+  li.className = "fi-row";
   const b = document.createElement("button");
   b.type = "button";
   b.className = "file-item";
   b.dataset["live"] = item.id;
+  b.setAttribute("aria-keyshortcuts", "Delete");
   const thumb = icon(item.kind === "text" ? "text" : "image");
   b.appendChild(thumb);
   const name = document.createElement("span");
@@ -876,8 +895,21 @@ function liveRow(item: Item): Row {
   b.addEventListener("click", () => {
     if (item !== current) show(item, "swap");
   });
-  li.appendChild(b);
-  const row: Row = { li, name, dot: d, thumb };
+  b.addEventListener("keydown", (e) => {
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    e.preventDefault();
+    remove(item, ".file-item");
+  });
+  // Remove from list: on a fine pointer it shows on the row's hover or
+  // focus, over the dot; on touch it's always there (reader.css).
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "fi-x";
+  x.title = "Remove from list";
+  x.innerHTML = `<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.75 3.75l8.5 8.5M12.25 3.75l-8.5 8.5"/></svg>`;
+  x.addEventListener("click", () => remove(item, ".fi-x"));
+  li.append(b, x);
+  const row: Row = { li, name, dot: d, thumb, x };
   rows.set(item, row);
   return row;
 }
@@ -893,23 +925,134 @@ export function prune(most: number): void {
   }
 }
 
+/** Taken out of "Your files" for good: a reading still out for one of
+ * these drops its answer (drop.ts). */
+export const gone = new WeakSet<Item>();
+
+/** An item's row, picture and clean copy freed. */
+export function free(item: Item): void {
+  gone.add(item);
+  item.asked = (item.asked ?? 0) + 1; // a text's reading still out is dropped
+  if (item.thumbUrl) URL.revokeObjectURL(item.thumbUrl);
+  if (item.cleanUrl) URL.revokeObjectURL(item.cleanUrl);
+  rows.get(item)?.li.remove();
+  rows.delete(item);
+}
+
 /** Takes one of the visitor's files or texts out of "Your files": its row,
  * its picture and clean copy freed. */
 export function forget(item: Item): void {
   const i = live.indexOf(item);
   if (i < 0) return;
-  if (item.thumbUrl) URL.revokeObjectURL(item.thumbUrl);
-  if (item.cleanUrl) URL.revokeObjectURL(item.cleanUrl);
-  rows.get(item)?.li.remove();
-  rows.delete(item);
   live.splice(i, 1);
-  $("#side-live").hidden = live.length === 0;
+  free(item);
+  syncGroup();
+}
+
+/** The visitor's × (or Delete on the row): the item leaves the list. The
+ * one on screen hands over to the row after it (or before it, or the
+ * first example), and the focus, if it was on this row, moves to the
+ * same control there. */
+function remove(item: Item, control: string): void {
+  const i = live.indexOf(item);
+  if (i < 0) return;
+  const row = rows.get(item);
+  const focused = !!row?.li.contains(document.activeElement);
+  const next = live[i + 1] ?? live[i - 1];
+  if (item === current) show(next ?? FIRST, "swap");
+  forget(item);
+  say(`Removed ${item.name}.`);
+  if (!focused) return;
+  const to = next && rows.get(next);
+  if (to) maybe<HTMLElement>(control, to.li)?.focus();
+  else focusCurrentRow();
+}
+
+const focusCurrentRow = () =>
+  maybe<HTMLElement>(`.side .file-item[aria-current="true"]`)?.focus();
+
+/** How long Undo stays after Clear. */
+const UNDO_MS = 5000;
+
+/** What Clear took, while Undo can still bring it back: the items, and
+ * the one on screen and what took its place. */
+let cleared: { items: Item[]; shown: Item | null; then: Item } | null = null;
+let stopUndo: (() => void) | null = null;
+
+/** Clear: every row goes at once; for 5 s "Cleared N files. Undo" stands
+ * in their place, then they're gone for good. */
+function clearAll(): void {
+  if (!live.length) return;
+  finishClear();
+  const shown = current.live ? current : null;
+  if (shown) show(FIRST, "swap");
+  const items = live.splice(0);
+  for (const item of items) rows.get(item)?.li.remove();
+  cleared = { items, shown, then: current };
+  const n = items.length;
+  const said = `Cleared ${fmt(n)} ${n === 1 ? "file" : "files"}.`;
+  $("#side-undo-text").textContent = said;
+  const bar = $("#side-undo");
+  bar.hidden = false;
+  syncGroup();
+  // The Clear button is gone with the rows: the focus goes to Undo.
+  $("#side-undo-btn").focus({ preventScroll: true });
+  revealInSide(bar);
+  say(said);
+  stopUndo = heldTimer(bar, UNDO_MS, finishClear);
+}
+
+/** Undo's 5 s are up (or something replaced it): the cleared items are
+ * freed, and the bar goes. */
+function finishClear(): void {
+  stopUndo?.();
+  stopUndo = null;
+  const c = cleared;
+  if (!c) return;
+  cleared = null;
+  const bar = $("#side-undo");
+  const hadFocus = bar.contains(document.activeElement);
+  bar.hidden = true;
+  for (const item of c.items) free(item);
+  for (const id of ["#dl-all-note", "#side-live-note"]) $(id).hidden = true;
+  syncGroup();
+  if (hadFocus) focusCurrentRow();
+}
+
+/** Undo: the cleared rows come back below any added since, and the one
+ * on screen comes back if nothing else was opened meanwhile. */
+function undoClear(): void {
+  stopUndo?.();
+  stopUndo = null;
+  const c = cleared;
+  if (!c) return;
+  cleared = null;
+  $("#side-undo").hidden = true;
+  // A text left empty would have left the list anyway.
+  const back = c.items.filter((x) => x.kind === "file" || x.plain?.trim());
+  for (const item of c.items) if (!back.includes(item)) free(item);
+  live.push(...back);
+  renderLiveList();
+  if (c.shown && back.includes(c.shown) && current === c.then)
+    show(c.shown, "swap");
+  focusCurrentRow();
+  const n = back.length;
+  say(`Restored ${fmt(n)} ${n === 1 ? "file" : "files"}.`);
+}
+
+/** The group's own parts: shown while it has rows (or Undo); Clear with
+ * two or more; Download all clean with two clean copies or more. */
+function syncGroup(): void {
+  $("#side-live").hidden = live.length === 0 && !cleared;
+  $("#side-clear").hidden = live.length < 2;
+  const files = live.filter((x) => x.kind === "file");
+  const done = files.filter((x) => x.state === "done" && x.cleanBlob);
+  $("#dl-all").hidden = files.length < 2 || done.length < 2;
 }
 
 /** The sidebar's "Your files": each row made once, its dot kept current. */
 export function renderLiveList(): void {
   const list = $("#side-live-list");
-  $("#side-live").hidden = live.length === 0;
   let before: Element | null = list.firstElementChild;
   for (const item of live) {
     const row = rows.get(item) ?? liveRow(item);
@@ -918,18 +1061,21 @@ export function renderLiveList(): void {
     if (row.name.textContent !== item.name) row.name.textContent = item.name;
     const title = item.title ?? item.name;
     if (row.name.title !== title) row.name.title = title;
+    const label = `Remove ${item.name} from list`;
+    if (row.x.getAttribute("aria-label") !== label)
+      row.x.setAttribute("aria-label", label);
     const [cls, said] = dotFor(item);
     row.dot.className = "fi-dot " + cls;
     row.dot.setAttribute("aria-label", said);
     if (row.li !== before) list.insertBefore(row.li, before);
     before = row.li.nextElementSibling;
   }
-  const files = live.filter((x) => x.kind === "file");
-  const done = files.filter((x) => x.state === "done" && x.cleanBlob);
-  $("#dl-all").hidden = files.length < 2 || done.length < 2;
+  syncGroup();
   markCurrent();
 }
 
+/** The reader in view, for a paste, a drop or a pick from anywhere on the
+ * page; from more than a screen away, with a way back (back.ts). */
 export function bringReaderIntoView(): void {
   const nav = $("#nav");
   const y = Math.max(
@@ -937,11 +1083,13 @@ export function bringReaderIntoView(): void {
     scrollY + $("#stage").getBoundingClientRect().top - (nav.offsetHeight + 12),
   );
   if (Math.abs(y - scrollY) > 4) {
+    if (Math.abs(y - scrollY) > innerHeight) offerWayBack(y);
     window.scrollTo({ top: y, behavior: motion() ? "smooth" : "auto" });
   }
 }
 
-/** Sidebar examples, the replay button and the resize upkeep. */
+/** Sidebar examples, the replay button, Clear and Undo, the way back
+ * after a jump, and the resize upkeep. */
 export function initReader(): void {
   $$("#side-examples .file-item").forEach((b) =>
     b.addEventListener("click", () => {
@@ -950,6 +1098,9 @@ export function initReader(): void {
     }),
   );
   $("#r-replay").addEventListener("click", () => show(current, "intro"));
+  $("#side-clear").addEventListener("click", clearAll);
+  $("#side-undo-btn").addEventListener("click", undoClear);
+  initBack();
   reduceMQ.addEventListener("change", syncReplay);
   syncReplay();
   addEventListener("resize", () => {

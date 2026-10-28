@@ -81,7 +81,7 @@
         <button class="btn btn-secondary js-paste" type="button"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Paste text</button>
       </div>
       <!-- examples:hexdump -->
-      <input class="file-input" id="file-input" type="file" multiple accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,.png,.jpg,.jpeg,.webp" tabindex="-1" aria-hidden="true">
+      <input class="file-input" id="file-input" type="file" multiple accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,.png,.jpg,.jpeg,.webp,.txt,.md,text/plain,text/markdown" tabindex="-1" aria-hidden="true">
     </div>
 
     <div class="stage" id="stage">
@@ -103,7 +103,8 @@
             <div class="win-body">
               <aside class="side" aria-label="Files">
                 <div class="side-group" id="side-live" hidden>
-                  <h2 class="side-title">Your files</h2>
+                  <div class="side-head"><h2 class="side-title">Your files</h2><button class="side-clear" id="side-clear" type="button" aria-label="Clear your files" hidden>Clear</button></div>
+                  <div class="side-undo" id="side-undo" hidden><span id="side-undo-text"></span><button class="btn btn-secondary btn-sm" id="side-undo-btn" type="button">Undo</button></div>
                   <button class="btn btn-secondary btn-sm side-all" id="dl-all" type="button" hidden><svg class="ic" aria-hidden="true"><use href="#i-down"/></svg><span>Download all clean</span></button>
                   <p class="side-note" id="dl-all-note" hidden></p>
                   <p class="side-note" id="side-live-note" hidden></p>
@@ -133,6 +134,7 @@
       </div>
     </div>
     <p class="sr-only" id="r-live" aria-live="polite"></p>
+    <button class="btn btn-secondary btn-sm back-to" id="back-to" type="button" hidden><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.75v10.5M4.25 9.5 8 13.25l3.75-3.75"/></svg><span>Back to where you were</span></button>
     <p class="sr-only" id="find-desc">Shows where this sits in the file. Press to keep it lit.</p>
   </section>
 

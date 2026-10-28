@@ -117,3 +117,63 @@ export function applyGeometry(root: ParentNode): void {
     delete el.dataset["width"];
   }
 }
+
+/** Calls `done` once `ms` have run, the clock stopped while the pointer is
+ * on `el` or the keyboard's focus is in it (WCAG 2.2.1), and `el` marked
+ * .is-held meanwhile. Returns what stops it early, without `done`. */
+export function heldTimer(
+  el: HTMLElement,
+  ms: number,
+  done: () => void,
+): () => void {
+  let left = ms;
+  let since = 0;
+  let timer = 0;
+  let held = false;
+  const keys = (t: EventTarget | null) =>
+    t instanceof Element && t.matches(":focus-visible");
+  let over = el.matches(":hover");
+  let focus =
+    keys(document.activeElement) && el.contains(document.activeElement);
+  const sync = () => {
+    const h = over || focus;
+    if (h === held) return;
+    held = h;
+    el.classList.toggle("is-held", h);
+    clearTimeout(timer);
+    timer = 0;
+    if (h) left -= performance.now() - since;
+    else {
+      since = performance.now();
+      timer = window.setTimeout(end, Math.max(0, left));
+    }
+  };
+  const enter = () => ((over = true), sync());
+  const leave = () => ((over = false), sync());
+  const into = (e: FocusEvent) => ((focus = keys(e.target)), sync());
+  const out = (e: FocusEvent) => {
+    if (el.contains(e.relatedTarget as Node | null)) return;
+    focus = false;
+    sync();
+  };
+  const stop = () => {
+    clearTimeout(timer);
+    el.classList.remove("is-held");
+    el.removeEventListener("pointerenter", enter);
+    el.removeEventListener("pointerleave", leave);
+    el.removeEventListener("focusin", into);
+    el.removeEventListener("focusout", out);
+  };
+  function end() {
+    stop();
+    done();
+  }
+  el.addEventListener("pointerenter", enter);
+  el.addEventListener("pointerleave", leave);
+  el.addEventListener("focusin", into);
+  el.addEventListener("focusout", out);
+  since = performance.now();
+  held = !(over || focus);
+  sync();
+  return stop;
+}

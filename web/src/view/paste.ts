@@ -6,12 +6,13 @@
 // A paste brings both text/plain and text/html (spec §7.4): the engine
 // finds hidden characters in the text and extras (IDs, styling, the page's
 // address) in the HTML, which goes with the text only while the text is
-// still exactly what was pasted.
+// still exactly what was pasted. A dropped or chosen text file comes in
+// here too, as a paste with no HTML.
 import { $, $$, maybe } from "../dom.ts";
 import { read, STALE } from "../engine.ts";
 import { announce } from "../feedback.ts";
 import { TOUCH } from "../motion.ts";
-import { MOST, readFiles, nextId } from "./drop.ts";
+import { MOST, nextId, onTextFile, readDropped } from "./drop.ts";
 import { liveText, lines } from "./live-text.ts";
 import { textName } from "./reader-html.ts";
 import {
@@ -234,6 +235,7 @@ function refresh(item: Item, fresh = false): void {
 
 export function initPaste(): void {
   onTextView(textView);
+  onTextFile((plain) => readText(plain));
   $$(".js-paste-key").forEach((el) => (el.textContent = PASTE_KEY));
   $$(".js-paste").forEach((b) => b.addEventListener("click", startText));
   // "New text", under each text in the reader.
@@ -248,12 +250,13 @@ export function initPaste(): void {
     if (t?.closest?.('textarea, input, [contenteditable="true"]')) return;
     const cd = e.clipboardData;
     if (!cd) return;
-    const imgs = Array.from(cd.files || []).filter((f) =>
-      f.type.startsWith("image/"),
+    // Files copied from a folder: pictures, and text files read as text.
+    const files = Array.from(cd.files || []).filter((f) =>
+      /^(image\/|text\/(plain|markdown)$)/.test(f.type),
     );
-    if (imgs.length) {
+    if (files.length) {
       e.preventDefault();
-      void readFiles(imgs);
+      void readDropped(files);
       return;
     }
     const plain = cd.getData("text/plain");

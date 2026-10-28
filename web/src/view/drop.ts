@@ -3,7 +3,8 @@
 // in the engine's worker, one after another; up to 200 at once (the rest
 // are left out, and the sidebar says so). An empty file gets a row that
 // says it couldn't be read. Several clean copies download together as
-// one zip, and a batch ends with one line said to a screen reader.
+// one zip, and a batch ends with one line said to a screen reader. A text
+// file (.txt, .md) is read as a paste is, unless its bytes are a picture.
 import { $, $$, cleanName, download, fmt, maybe } from "../dom.ts";
 import { read, STALE } from "../engine.ts";
 import { announce, flash, saved } from "../feedback.ts";
@@ -12,6 +13,8 @@ import { dotFor } from "./reader-html.ts";
 import {
   bringReaderIntoView,
   current,
+  free,
+  gone,
   live,
   prune,
   renderLiveList,
@@ -77,6 +80,56 @@ function batchLine(items: Item[], left: number): string {
   return `${head}: ${said.length ? said.join(", ") : "no marks found"}${tail}`;
 }
 
+/** Named or typed as text, and not empty. */
+const TEXTISH = /\.(txt|md|markdown)$/i;
+const textish = (f: File) =>
+  f.size > 0 &&
+  (TEXTISH.test(f.name) || /^text\/(plain|markdown)$/.test(f.type));
+
+/** The first bytes of the pictures tellall reads (and a GIF's, which it
+ * says it can't), as the engine's detect() knows them: a file named .txt
+ * with these is a picture. */
+function looksLikeImage(b: Uint8Array): boolean {
+  const at = (o: number, s: string) =>
+    [...s].every((c, i) => b[o + i] === c.charCodeAt(0));
+  return (
+    (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) ||
+    (b[0] === 0x89 && at(1, "PNG")) ||
+    (at(0, "RIFF") && at(8, "WEBP")) ||
+    at(4, "ftyp") ||
+    at(0, "GIF8")
+  );
+}
+
+/** A text file's words, or null when its bytes aren't text (a picture, or
+ * anything with a NUL byte in it). */
+async function textOf(f: File): Promise<string | null> {
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  if (looksLikeImage(bytes) || bytes.includes(0)) return null;
+  return new TextDecoder().decode(bytes);
+}
+
+/** Reads a text as a paste is (paste.ts). */
+let readAsText: ((plain: string) => void) | null = null;
+export const onTextFile = (fn: (plain: string) => void) => {
+  readAsText = fn;
+};
+
+/** Files from a drop, a pick or a paste: text files are read as text,
+ * everything else as a file. */
+export async function readDropped(files: FileList | File[]): Promise<void> {
+  const rest: File[] = [];
+  const texts: string[] = [];
+  for (const f of Array.from(files)) {
+    const plain = textish(f) && readAsText ? await textOf(f) : null;
+    if (plain === null) rest.push(f);
+    else texts.push(plain);
+  }
+  // Texts first, so a batch's pictures lead the list and the first shows.
+  for (const plain of texts) readAsText?.(plain);
+  await readFiles(rest);
+}
+
 export async function readFiles(files: FileList | File[]): Promise<void> {
   const all = Array.from(files);
   const list = all.slice(0, MOST);
@@ -123,7 +176,8 @@ export async function readFiles(files: FileList | File[]): Promise<void> {
   }
   for (const item of items) {
     const file = item.file;
-    if (!file) continue;
+    // Removed from the list (or cleared, past Undo) before its turn.
+    if (!file || gone.has(item)) continue;
     try {
       if (item !== first) item.thumbUrl = await thumbnail(file);
       renderLiveList();
@@ -154,13 +208,20 @@ export async function readFiles(files: FileList | File[]): Promise<void> {
     }
     // A HEIC keeps its file, for the browser's own decoder to draw.
     if (!HEIC.test(item.name)) delete item.file;
+    // Removed while it was read: what the reading made goes too.
+    if (gone.has(item)) {
+      free(item);
+      continue;
+    }
     prune(MOST);
     renderLiveList();
     if (current === item) show(item, "swap");
   }
   // One file: its headline takes the focus (result.ts landed). Several:
   // one line for the whole batch, never one per file.
-  if (items.length > 1) announce(batchLine(items, left));
+  // Those taken out of the list meanwhile aren't counted.
+  const kept = items.filter((x) => !gone.has(x));
+  if (kept.length > 1) announce(batchLine(kept, left));
 }
 
 export function initDrop(): void {
@@ -174,7 +235,7 @@ export function initDrop(): void {
     if (t?.closest?.(".view .js-choose")) input.click();
   });
   input.addEventListener("change", () => {
-    if (input.files) void readFiles(input.files);
+    if (input.files) void readDropped(Array.from(input.files));
     input.value = "";
   });
 
@@ -217,7 +278,7 @@ export function initDrop(): void {
     e.preventDefault();
     depth = 0;
     drop.hidden = true;
-    void readFiles(e.dataTransfer.files);
+    void readDropped(e.dataTransfer.files);
   });
 
   // Every clean copy, as one zip; the line under it says what's in it
