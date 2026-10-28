@@ -33,9 +33,13 @@ chatgpt-image.png
 gps.jpg
   Wrote gps.clean.jpg
   Removed location, camera and device details, dates and times, software names and other details: 951 bytes.
+
+Wrote 1 clean copy; 1 had nothing to remove.
 ```
 
-Text on stdin:
+After two files or more, a report ends with a count line too, such as `3 files: 1 with an AI label, 1 with personal data and 1 with nothing found.`
+
+Text on stdin, or in a `.txt` or `.md` file (`npx tellall -- notes.txt`):
 
 ```
 $ printf 'hi\xe2\x80\x8bthere' | npx tellall -
@@ -43,6 +47,15 @@ stdin
   This text has 1 hidden character.
   · 1 hidden character: ZERO WIDTH SPACE (U+200B). They don't show, but they travel with the text.
 ```
+
+The same text without its hidden characters, on stdout; what was removed goes to stderr:
+
+```
+$ printf 'hi\xe2\x80\x8bthere' | npx tellall clean - > clean.txt
+tellall: removed hidden characters: 3 bytes.
+```
+
+`npx tellall clean -- notes.txt` writes `notes.clean.txt` next to it, by the same rules as an image's copy.
 
 To stop a build that would publish photos with personal data in them:
 
@@ -58,23 +71,30 @@ npx tellall [options] [--] <file|dir|-> ...
     --json                       machine-readable reports
     --all                        also print raw fields
     --fail-on private|label|any  exit 1 if any input has that kind of finding (CI use)
-npx tellall clean [options] [--] <file|dir> ...
-    Write clean copies, never touching originals.
+    --no-color                   no colours (also when NO_COLOR is set)
+npx tellall clean [options] [--] <file|dir|-> ...
+    Write clean copies, never touching originals; "-" cleans text from
+    stdin and writes it to stdout.
     -o, --out <dir>              where to write (default: next to each file, name.clean.ext)
     --remove-labels              also remove AI labels (C2PA, AI-source tags); files you own
     --force                      replace .clean copies already there
     --always                     also write a copy when nothing is removed
+    --no-color                   no colours (also when NO_COLOR is set)
 npx tellall -h, --help           this text
 npx tellall -v, --version        the version number
 ```
+
+tellall reads JPEG, PNG, WebP and HEIC images, and texts: `.txt` and `.md` files, and stdin. A `.txt` that is really an image is read as the image.
 
 Put `--` before the paths so a name starting with `-` isn't read as an option.
 
 Folders are read all the way down, except links, `node_modules` and folders whose names start with a dot; tellall says on stderr how many it skipped.
 
-Text on stdin can be UTF-8, or UTF-16 with a byte order mark; tellall says so if it isn't valid UTF-8.
+Text can be UTF-8, or UTF-16 with a byte order mark; tellall says so if it isn't valid UTF-8. Clean text is written as UTF-8.
 
-Reports go to stdout. Errors and skip notes go to stderr.
+Reports go to stdout. Errors and skip notes go to stderr. With `clean -`, stdout is the clean text alone and everything else goes to stderr.
+
+On a terminal, file names are bold and each headline and bullet takes the colour of its kind: magenta for an AI label, red for personal data and hidden characters, green for nothing found, yellow for a file tellall can't read. There's no colour when stdout isn't a terminal, with `--json`, with `--no-color` or when `NO_COLOR` is set; `FORCE_COLOR=1` turns it on where stdout isn't a terminal.
 
 ## Clean copies
 

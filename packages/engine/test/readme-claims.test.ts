@@ -5,8 +5,9 @@
 //   must be its golden report's, fixtures/expected/<name>-<ext>.json, in
 //   order, harmless findings left out as the CLI does;
 // - `$ npx tellall clean [--remove-labels] <files>`: each file's lines
-//   must be what clean() says for that fixture, and the label notice must
-//   appear exactly when labels were removed.
+//   must be what clean() says for that fixture, the label notice must
+//   appear exactly when labels were removed, and after two files or more
+//   the count line must add up.
 import { readdirSync, readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { clean, words, type Report } from "../src/index.ts";
@@ -138,6 +139,21 @@ test.each(cleans.map((e) => [e.args.join(" "), e] as const))(
         ...notes.map((n) => `· ${n}`),
       ]);
     }
-    expect(example.after).toEqual(removed ? [words.clean.labelsRemoved] : []);
+    // After two files or more, the CLI's count line.
+    const wrote = example.files.filter((f) =>
+      f.lines[0]?.startsWith("Wrote "),
+    ).length;
+    const nothing = example.files.length - wrote;
+    const copies = wrote === 1 ? "1 clean copy" : `${wrote} clean copies`;
+    const count =
+      example.files.length > 1
+        ? [
+            `Wrote ${wrote ? copies : "no clean copies"}${nothing ? `; ${nothing} had nothing to remove` : ""}.`,
+          ]
+        : [];
+    expect(example.after).toEqual([
+      ...(removed ? [words.clean.labelsRemoved] : []),
+      ...count,
+    ]);
   },
 );

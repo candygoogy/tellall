@@ -1,13 +1,16 @@
 // tellall on the command line (spec §5.2): reports on files, folders and
-// stdin, or clean copies of files. Exit 0 done, 1 --fail-on matched, 2 a
-// usage, read or write error (clean that can't make a copy of a damaged
-// file included). A file of a kind tellall can't read, a file with nothing
-// to remove and a copy already there are listed and leave the code alone.
+// stdin, or clean copies of files and of text on stdin. Exit 0 done, 1
+// --fail-on matched, 2 a usage, read or write error (clean that can't make
+// a copy of a damaged file included). A file of a kind tellall can't read,
+// a file with nothing to remove and a copy already there are listed and
+// leave the code alone.
 import {
   clean,
+  detect,
   inspect,
   words,
   type Cleaned,
+  type Finding,
   type Group,
   type Report,
 } from "@tellall/engine";
@@ -29,7 +32,14 @@ import {
   type FailOn,
 } from "./args.ts";
 import { decodeText, idOf, readInput, Said, writeCopy } from "./io.ts";
-import { block, formatReport, safe } from "./print.ts";
+import {
+  block,
+  countLine,
+  formatReport,
+  listed,
+  paint,
+  safe,
+} from "./print.ts";
 
 declare const TELLALL_VERSION: string;
 
@@ -217,6 +227,82 @@ async function withBytes<T>(
   return null;
 }
 
+/** Names of files read as text, unless their bytes show an image. */
+const TEXT_NAME = /\.(txt|md)$/i;
+
+/** A .txt or .md file's bytes, read whole. Undefined for any other file,
+ * and for one whose first bytes show an image: it's read as the image it
+ * is. Null after an error, said. */
+function textOf(entry: Entry): Uint8Array | null | undefined {
+  if (!TEXT_NAME.test(entry.path)) return undefined;
+  try {
+    let input = readInput(entry.path);
+    if (detect(input.bytes)) return undefined;
+    if (!input.whole) input = readInput(entry.path, true);
+    return input.bytes;
+  } catch (e) {
+    problem(`can't read ${entry.shown}: ${why(e)}`);
+    return null;
+  }
+}
+
+/** A text's report, from its bytes. */
+async function textReport(bytes: Uint8Array, name: string): Promise<Report> {
+  const { text, invalid } = decodeText(bytes);
+  const report = await inspect({ kind: "text", plain: text });
+  if (invalid) {
+    const note: Finding = {
+      group: "other-text",
+      kind: "info",
+      sentence: `Some of this text isn't valid ${invalid}, so tellall read those bytes as �. Save it as ${invalid} and check it again to be sure nothing is hidden there.`,
+      fields: [],
+      cleanedBy: "nothing",
+    };
+    report.findings.unshift(note);
+  }
+  return { ...report, name };
+}
+
+/** A text cleaned: the clean text, and `notes(copy)`, what to say about
+ * it, `copy` naming the clean text; null when none is written. */
+async function cleanTextOf(bytes: Uint8Array) {
+  const { text, invalid, encoding } = decodeText(bytes);
+  const result = await clean({ kind: "text", plain: text });
+  const output = result.output as string;
+  const notes = (copy: string | null) => {
+    const list = [...result.notes];
+    if (invalid) {
+      list.push(
+        copy
+          ? `Some of this text isn't valid ${invalid}, so those bytes are � in ${copy}.`
+          : `Some of this text isn't valid ${invalid}, so tellall read those bytes as �.`,
+      );
+    }
+    if (copy && encoding === "UTF-16")
+      list.push(`${upperFirst(copy)} is UTF-8.`);
+    return list;
+  };
+  return {
+    output,
+    removed: result.removed,
+    /** UTF-8 bytes, as the clean text is written. */
+    gone: Buffer.byteLength(text) - Buffer.byteLength(output),
+    notes,
+  };
+}
+
+const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Colours: on a terminal, unless --no-color or NO_COLOR (any value but
+ * empty, no-color.org) says no. FORCE_COLOR (any value but 0 or false)
+ * turns them on where stdout isn't a terminal. */
+function colorOn(wanted: boolean): boolean {
+  if (!wanted || process.env.NO_COLOR) return false;
+  const force = process.env.FORCE_COLOR;
+  if (force !== undefined) return force !== "0" && force !== "false";
+  return process.stdout.isTTY === true;
+}
+
 async function readStdin(): Promise<Uint8Array> {
   if (process.stdin.isTTY) {
     process.stderr.write(
@@ -261,10 +347,11 @@ function saySkipped() {
 /** Reports; true when --fail-on matched. */
 async function runInspect(args: Extract<Args, { command: "inspect" }>) {
   const reports: Report[] = [];
+  const p = paint(!args.json && colorOn(args.color));
   const show = (report: Report) => {
     reports.push(report);
     if (!args.json) {
-      out(lead() + formatReport(report, args.all));
+      out(lead() + formatReport(report, args.all, p));
     }
   };
   for (const path of args.paths) {
@@ -276,21 +363,16 @@ async function runInspect(args: Extract<Args, { command: "inspect" }>) {
         problem(`can't read stdin: ${why(e)}`);
         continue;
       }
-      const { text, invalid } = decodeText(bytes);
-      const report = await inspect({ kind: "text", plain: text });
-      if (invalid) {
-        report.findings.unshift({
-          group: "other-text",
-          kind: "info",
-          sentence: `Some of this text isn't valid ${invalid}, so tellall read those bytes as �. Save it as ${invalid} and check it again to be sure nothing is hidden there.`,
-          fields: [],
-          cleanedBy: "nothing",
-        });
-      }
-      show({ ...report, name: "stdin" });
+      show(await textReport(bytes, "stdin"));
       continue;
     }
     for (const entry of entries(path)) {
+      const text = textOf(entry);
+      if (text === null) continue;
+      if (text) {
+        show(await textReport(text, entry.shown));
+        continue;
+      }
       const report = await withBytes(
         entry,
         "read",
@@ -301,6 +383,7 @@ async function runInspect(args: Extract<Args, { command: "inspect" }>) {
     }
   }
   if (args.json) out(JSON.stringify(reports, null, 2) + "\n");
+  else if (reports.length > 1) out(lead() + countLine(reports, p));
   saySkipped();
   return args.failOn !== null && matches(reports, args.failOn);
 }
@@ -322,11 +405,7 @@ const GONE: Record<Group, string> = {
 /** "Removed location and dates: 1,234 bytes." */
 function removedLine(removed: Group[], bytes: number): string | null {
   if (!removed.length) return null;
-  const names = removed.map((g) => GONE[g]);
-  const list =
-    names.length > 1
-      ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
-      : names[0];
+  const list = listed(removed.map((g) => GONE[g]));
   const size =
     bytes > 0
       ? `: ${bytes.toLocaleString("en-US")} ${bytes === 1 ? "byte" : "bytes"}`
@@ -382,6 +461,47 @@ function makeFolder(dir: string) {
   }
 }
 
+/** `clean -`: the clean text to stdout, and nothing else there; what was
+ * removed goes to stderr first. */
+async function cleanStdin() {
+  let bytes;
+  try {
+    bytes = await readStdin();
+  } catch (e) {
+    problem(`can't read stdin: ${why(e)}`);
+    return;
+  }
+  const t = await cleanTextOf(bytes);
+  const gone = removedLine(t.removed, t.gone);
+  const lines = [...(gone ? [gone] : []), ...t.notes("the clean text")];
+  process.stderr.write(
+    lead() + lines.map((l) => `tellall: ${safe(lowerFirst(l))}\n`).join(""),
+  );
+  out(t.output);
+}
+
+/** "Wrote 2 clean copies; 1 had nothing to remove." */
+function cleanCountLine(tally: {
+  wrote: number;
+  nothing: number;
+  unknown: number;
+  copies: number;
+  failed: number;
+}): string {
+  const rest = [
+    tally.nothing ? `${tally.nothing} had nothing to remove` : "",
+    tally.copies
+      ? `${tally.copies} ${tally.copies === 1 ? "was a clean copy" : "were clean copies"} already`
+      : "",
+    tally.unknown ? `${tally.unknown} tellall can't read` : "",
+    tally.failed ? `${tally.failed} couldn't be cleaned` : "",
+  ].filter(Boolean);
+  const wrote = tally.wrote
+    ? `Wrote ${plural(tally.wrote, "clean copy", "clean copies")}`
+    : "Wrote no clean copies";
+  return `${wrote}${rest.length ? `; ${listed(rest)}` : ""}.\n`;
+}
+
 /** Clean copies, never over an original, over an earlier copy only with
  * --force; none for a file with nothing to remove, unless --always. */
 async function runClean(args: Extract<Args, { command: "clean" }>) {
@@ -401,8 +521,20 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
   /** Copies that were already there, left as they are and said once at
    * the end. */
   const there: string[] = [];
+  // With "-", stdout carries the clean text alone; the rest goes to stderr.
+  const stdin = args.paths.includes("-");
+  const write = stdin
+    ? (s: string) => void process.stderr.write(s)
+    : (s: string) => out(s);
+  const p = paint(!stdin && colorOn(args.color));
+  /** What came of each file, for the count line at the end. */
+  const tally = { wrote: 0, nothing: 0, unknown: 0, copies: 0, failed: 0 };
   const print = (name: string, under: string[]) =>
-    out(lead() + block(name, under));
+    write(lead() + block(name, under, p));
+  const fail = (message: string) => {
+    tally.failed++;
+    problem(message);
+  };
   /** The files read, so a file named twice is cleaned once. */
   const seen = new Set<string>();
   /** This run's copies, by path and by file, so two inputs can't write
@@ -414,6 +546,10 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
   const keepNames = args.out !== null && args.paths.length > 1;
 
   for (const path of args.paths) {
+    if (path === "-") {
+      await cleanStdin();
+      continue;
+    }
     for (const entry of entries(path, keepNames)) {
       const real = realOf(entry.path);
       if (seen.has(real)) continue;
@@ -421,43 +557,89 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
       const name = basename(entry.path);
       if (isOurCopy(entry.path)) {
         if (entry.named) {
+          tally.copies++;
           print(entry.shown, ["Already a clean copy, so left as it is."]);
         } else {
           skipped.copies++;
         }
         continue;
       }
-      let original: Uint8Array = new Uint8Array(0);
-      const result = await withBytes<Cleaned>(
-        entry,
-        "clean",
-        (bytes) => {
-          original = bytes;
-          return clean(
-            { kind: "file", name, bytes },
-            { removeLabels: args.removeLabels },
-          );
-        },
-        (r) => !r.cleaned && r.notes[0] === words.clean.unknown,
-      );
-      if (!result) continue;
-      if (!result.cleaned) {
-        // A kind of file tellall can't read is listed, not an error.
-        if (result.notes[0] === words.clean.unknown) {
-          print(entry.shown, result.notes);
-        } else {
-          problem(`${entry.shown}: ${lowerFirst(result.notes.join(" "))}`);
-        }
+
+      /** The copy, whether it is the original byte for byte, and what to
+       * say about it. */
+      let made: {
+        output: Uint8Array;
+        same: boolean;
+        removed: Group[];
+        gone: number;
+        notes: string[];
+        labels: boolean;
+      };
+      const text = textOf(entry);
+      if (text === null) {
+        tally.failed++;
         continue;
       }
-      const output = result.output as Uint8Array;
-      // The engine's notes; the one about labels comes once, at the end.
-      const notes = result.notes.filter((n) => n !== words.clean.labelsRemoved);
-      // Nothing removed: a copy would be the original, byte for byte.
-      if (!args.always && Buffer.compare(output, original) === 0) {
-        const said = notes.map((n) =>
+      if (text) {
+        const t = await cleanTextOf(text);
+        const same = t.removed.length === 0;
+        made = {
+          output: Buffer.from(t.output, "utf8"),
+          same,
+          removed: t.removed,
+          gone: t.gone,
+          notes: t.notes(same && !args.always ? null : "the copy"),
+          labels: false,
+        };
+      } else {
+        let original: Uint8Array = new Uint8Array(0);
+        const result = await withBytes<Cleaned>(
+          entry,
+          "clean",
+          (bytes) => {
+            original = bytes;
+            return clean(
+              { kind: "file", name, bytes },
+              { removeLabels: args.removeLabels },
+            );
+          },
+          (r) => !r.cleaned && r.notes[0] === words.clean.unknown,
+        );
+        if (!result) {
+          tally.failed++;
+          continue;
+        }
+        if (!result.cleaned) {
+          // A kind of file tellall can't read is listed, not an error.
+          if (result.notes[0] === words.clean.unknown) {
+            tally.unknown++;
+            print(entry.shown, result.notes);
+          } else {
+            fail(`${entry.shown}: ${lowerFirst(result.notes.join(" "))}`);
+          }
+          continue;
+        }
+        const output = result.output as Uint8Array;
+        // The engine's notes; the one about labels comes once, at the end.
+        const notes = result.notes.filter(
+          (n) => n !== words.clean.labelsRemoved,
+        );
+        made = {
+          output,
+          same: Buffer.compare(output, original) === 0,
+          removed: result.removed,
+          gone: original.length - output.length,
+          notes,
+          labels: notes.length < result.notes.length,
+        };
+      }
+
+      // Nothing removed: a copy would be the original.
+      if (!args.always && made.same) {
+        const said = made.notes.map((n) =>
           n === words.clean.labelKeeps ? words.clean.labelKeepsNoCopy : n,
         );
+        tally.nothing++;
         print(entry.shown, ["No copy written.", ...said.map((n) => `· ${n}`)]);
         continue;
       }
@@ -471,7 +653,7 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
       const key = resolve(target);
       const id = idOf(target);
       if (written.has(key) || (id !== null && writtenIds.has(id))) {
-        problem(
+        fail(
           `${shownTarget} was already written from another file, so ${entry.shown} wasn't cleaned.`,
         );
         continue;
@@ -481,28 +663,31 @@ async function runClean(args: Extract<Args, { command: "clean" }>) {
         if (statSync(target, { throwIfNoEntry: false })?.isDirectory()) {
           throw new Said("a folder of that name is in the way");
         }
-        writeCopy(target, output, args.force);
+        writeCopy(target, made.output, args.force);
       } catch (e) {
         if (codeOf(e) === "EEXIST") {
           there.push(shownTarget);
         } else {
-          problem(`couldn't write ${shownTarget}: ${why(e)}`);
+          fail(`couldn't write ${shownTarget}: ${why(e)}`);
         }
         continue;
       }
       written.add(key);
       const newId = idOf(target);
       if (newId !== null) writtenIds.add(newId);
-      if (notes.length < result.notes.length) labelsRemoved = true;
-      const gone = removedLine(result.removed, original.length - output.length);
+      if (made.labels) labelsRemoved = true;
+      tally.wrote++;
+      const gone = removedLine(made.removed, made.gone);
       print(entry.shown, [
         `Wrote ${shownTarget}`,
         ...(gone ? [gone] : []),
-        ...notes.map((n) => `· ${n}`),
+        ...made.notes.map((n) => `· ${n}`),
       ]);
     }
   }
-  if (labelsRemoved) out(`${lead()}${words.clean.labelsRemoved}\n`);
+  if (labelsRemoved) write(`${lead()}${words.clean.labelsRemoved}\n`);
+  const files = Object.values(tally).reduce((a, b) => a + b, 0);
+  if (files > 1) write(lead() + cleanCountLine(tally));
   if (there.length === 1) {
     say(
       `${there[0]} is already there, left as it is; add --force to replace it.`,

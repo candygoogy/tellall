@@ -1,6 +1,6 @@
 ---
 name: tellall
-description: Use when the user asks what an image or a piece of copied text gives away about them (location, camera, dates, tracking IDs, hidden characters, the page address in a copy), whether an image says it was made by AI or carries a C2PA or Content Credentials label, or asks to clean, strip or scrub metadata from JPEG, PNG, WebP or HEIC files before publishing or sharing them.
+description: Use when the user asks what an image or a piece of copied text gives away about them (location, camera, dates, tracking IDs, hidden characters, the page address in a copy), whether an image says it was made by AI or carries a C2PA or Content Credentials label, or asks to clean, strip or scrub metadata from JPEG, PNG, WebP or HEIC files, or hidden characters from a text, before publishing or sharing them.
 ---
 
 # tellall
@@ -23,7 +23,7 @@ npx -y tellall --json -- <paths>
 
 Folders are read all the way down, except links, `node_modules` and folders whose names start with a dot; tellall says on stderr how many it skipped. The output is a JSON array of reports: `name`, `format` (`unknown` means tellall can't read that kind of file), `headline`, and `findings`, each with a `kind` (`label`, `private`, `info`, `harmless`), a `sentence` and the raw `fields`. Exit codes: 0 done; 1 `--fail-on` matched; 2 usage, read or write error, also when `clean` can't make a copy of a damaged file. A file of a kind tellall can't read is listed and doesn't change the exit code. The reports for the files it could read are still printed.
 
-For text the user pasted, save it to a file and pass it on stdin: `npx -y tellall --json - < 'pasted.txt'`.
+For text the user pasted, save it to a `.txt` file and pass that, or pass it on stdin: `npx -y tellall --json -- 'pasted.txt'` or `npx -y tellall --json - < 'pasted.txt'`. `.txt` and `.md` files are read as text, also inside folders, unless their bytes show an image.
 
 ## Explain the result
 
@@ -45,7 +45,7 @@ This writes `name.clean.ext` next to each file and never changes the original. `
 
 A clean copy removes location, camera, dates, software, IDs, text and any other metadata tellall can't name, and keeps the AI label (with any data inside it). A HEIC whose XMP holds the AI-source tag keeps that whole XMP item; tellall names what else is in it. If a labelled image also had private data, tell the user what tellall prints: the label was kept but no longer matches the file.
 
-`clean` takes image files, not text. For text, the report names the hidden characters; if the user wants them gone, remove those characters yourself and keep the harmless ones.
+For text, `clean` removes the hidden characters and keeps the harmless ones and unusual spaces. A `.txt` or `.md` file gets a `name.clean.txt` copy by the same rules. `npx -y tellall clean - < 'pasted.txt'` writes the clean text to stdout and what was removed to stderr.
 
 ## Removing AI labels
 

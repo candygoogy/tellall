@@ -11,6 +11,8 @@ export type Args =
       json: boolean;
       all: boolean;
       failOn: FailOn | null;
+      /** False with --no-color. */
+      color: boolean;
     }
   | {
       command: "clean";
@@ -19,6 +21,8 @@ export type Args =
       removeLabels: boolean;
       force: boolean;
       always: boolean;
+      /** False with --no-color. */
+      color: boolean;
     };
 
 export const SUMMARY =
@@ -26,9 +30,9 @@ export const SUMMARY =
 
 /** The one line shown after a usage error. */
 export const USAGE_LINE =
-  "Usage: tellall [options] [--] <file|dir|-> ...   or   tellall clean [options] [--] <file|dir> ...";
+  "Usage: tellall [options] [--] <file|dir|-> ...   or   tellall clean [options] [--] <file|dir|-> ...";
 export const USAGE_LINE_CLEAN =
-  "Usage: tellall clean [options] [--] <file|dir> ...";
+  "Usage: tellall clean [options] [--] <file|dir|-> ...";
 
 export const USAGE = `${SUMMARY}
 
@@ -38,12 +42,15 @@ Usage:
     --json                       machine-readable reports
     --all                        also print raw fields
     --fail-on private|label|any  exit 1 if any input has that kind of finding
-  tellall clean [options] [--] <file|dir> ...
-    Write clean copies, never touching originals.
+    --no-color                   no colours (also when NO_COLOR is set)
+  tellall clean [options] [--] <file|dir|-> ...
+    Write clean copies, never touching originals; "-" cleans text from
+    stdin and writes it to stdout.
     -o, --out <dir>              where to write (default: next to each file, name.clean.ext)
     --remove-labels              also remove AI labels (C2PA, AI-source tags); files you own
     --force                      replace .clean copies already there
     --always                     also write a copy when nothing is removed
+    --no-color                   no colours (also when NO_COLOR is set)
   tellall -h, --help             this text
   tellall -v, --version          the version number
 
@@ -51,6 +58,9 @@ Examples:
   tellall -- photo.jpg                   what does this file tell about you?
   tellall clean -- holiday-photos        write clean copies of a folder's images
   tellall --fail-on private -- public   in CI: exit 1 if an image has personal data
+
+tellall reads JPEG, PNG, WebP and HEIC images, and texts: .txt and .md
+files, and stdin. A .txt that is really an image is read as the image.
 
 Put -- before the paths so a name starting with "-" isn't read as an option.
 Folders are read all the way down, except links, node_modules and folders
@@ -103,13 +113,19 @@ function nearest(flag: string, known: readonly string[]): string | null {
 }
 
 const FAIL_ON: readonly string[] = ["private", "label", "any"];
-const INSPECT_FLAGS: readonly string[] = ["--json", "--all", "--fail-on"];
+const INSPECT_FLAGS: readonly string[] = [
+  "--json",
+  "--all",
+  "--fail-on",
+  "--no-color",
+];
 const CLEAN_FLAGS: readonly string[] = [
   "-o",
   "--out",
   "--remove-labels",
   "--force",
   "--always",
+  "--no-color",
 ];
 
 /** The arguments after `node tellall.js`. Throws UsageError. */
@@ -171,7 +187,9 @@ function parse(argv: string[]): Args {
     if (flag === "-h" || flag === "--help") return { command: "help" };
     if (flag === "-v" || flag === "--version") return { command: "version" };
     if (!(cleaning ? CLEAN_FLAGS : INSPECT_FLAGS).includes(flag)) {
-      const other = cleaning ? INSPECT_FLAGS : CLEAN_FLAGS;
+      const other = (cleaning ? INSPECT_FLAGS : CLEAN_FLAGS).filter(
+        (f) => f !== "--no-color",
+      );
       const near = nearest(flag, [
         ...(cleaning ? CLEAN_FLAGS : INSPECT_FLAGS),
         "--help",
@@ -202,14 +220,14 @@ function parse(argv: string[]): Args {
   if (!paths.length) {
     throw new UsageError(
       cleaning
-        ? "name a file or folder to clean."
+        ? "name a file, folder or - to clean."
         : "name a file, folder or -.",
     );
   }
+  if (paths.filter((p) => p === "-").length > 1) {
+    throw new UsageError('"-" can be given once.');
+  }
   if (cleaning) {
-    if (paths.includes("-")) {
-      throw new UsageError("clean takes files and folders, not stdin.");
-    }
     return {
       command: "clean",
       paths,
@@ -217,10 +235,8 @@ function parse(argv: string[]): Args {
       removeLabels: flags.has("--remove-labels"),
       force: flags.has("--force"),
       always: flags.has("--always"),
+      color: !flags.has("--no-color"),
     };
-  }
-  if (paths.filter((p) => p === "-").length > 1) {
-    throw new UsageError('"-" can be given once.');
   }
   return {
     command: "inspect",
@@ -228,5 +244,6 @@ function parse(argv: string[]): Args {
     json: flags.has("--json"),
     all: flags.has("--all"),
     failOn,
+    color: !flags.has("--no-color"),
   };
 }

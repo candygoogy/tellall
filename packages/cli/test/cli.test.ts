@@ -25,6 +25,8 @@ const BIN = join(CLI_DIR, "dist/tellall.js");
 const CHATGPT = join(ROOT, "fixtures/ai/chatgpt-image.png");
 const GPS = join(ROOT, "fixtures/photo/gps.jpg");
 const DAMAGED = join(ROOT, "fixtures/photo/damaged.jpg");
+/** ZERO WIDTH SPACE, a hidden character. */
+const ZWSP = String.fromCharCode(0x200b);
 const NOTICE =
   "AI labels removed. The invisible watermark in the pixels (if any) stays; this tool can't remove it.";
 
@@ -39,14 +41,25 @@ afterAll(() => {
   if (tmp) rmSync(tmp, { recursive: true, force: true });
 });
 
+/** The environment without the colour switches, so output is the same
+ * wherever the tests run. */
+const ENV = { ...process.env };
+delete ENV.FORCE_COLOR;
+delete ENV.NO_COLOR;
+
 function tellall(
   args: string[],
-  opts: { input?: string | Buffer; cwd?: string } = {},
+  opts: {
+    input?: string | Buffer;
+    cwd?: string;
+    env?: Record<string, string>;
+  } = {},
 ) {
   const r = spawnSync(process.execPath, [BIN, ...args], {
     cwd: opts.cwd ?? ROOT,
     input: opts.input ?? "",
     encoding: "utf8",
+    env: { ...ENV, ...opts.env },
   });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
@@ -225,8 +238,112 @@ describe("tellall clean", () => {
     expect(() => statSync(join(out, "sub/b.clean.clean.jpg"))).toThrow();
   });
 
-  test("stdin can't be cleaned", () => {
-    expect(tellall(["clean", "-"]).code).toBe(2);
+  test("- writes the clean text to stdout and what was removed to stderr", () => {
+    const r = tellall(["clean", "-"], { input: `a${ZWSP}b\n` });
+    expect(r.code).toBe(0);
+    expect(r.out).toBe("ab\n");
+    expect(r.err).toBe("tellall: removed hidden characters: 3 bytes.\n");
+    const none = tellall(["clean", "-"], { input: "plain" });
+    expect(none.out).toBe("plain");
+    expect(none.err).toBe("tellall: nothing private to remove.\n");
+    expect(tellall(["clean", "-", "-"]).code).toBe(2);
+  });
+
+  test("- with files: their blocks go to stderr, stdout stays the text", () => {
+    const dir = folder("stdin-and-files", { "gps.jpg": GPS });
+    const r = tellall(["clean", "-", join(dir, "gps.jpg")], {
+      input: `x${ZWSP}y`,
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toBe("xy");
+    expect(r.err).toContain("Wrote ");
+  });
+
+  test("a .txt gets a .clean.txt without its hidden characters", () => {
+    const dir = folder("text-clean", {
+      "notes.txt": Buffer.from(`hi${ZWSP}there\n`),
+      "plain.md": Buffer.from("nothing here\n"),
+    });
+    const r = tellall(["clean", "."], { cwd: dir });
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(dir, "notes.clean.txt"), "utf8")).toBe(
+      "hithere\n",
+    );
+    expect(r.out).toContain(
+      "notes.txt\n  Wrote notes.clean.txt\n  Removed hidden characters: 3 bytes.\n",
+    );
+    expect(r.out).toContain(
+      "plain.md\n  No copy written.\n  · Nothing private to remove.\n",
+    );
+    expect(() => statSync(join(dir, "plain.clean.md"))).toThrow();
+    expect(
+      r.out.endsWith("\nWrote 1 clean copy; 1 had nothing to remove.\n"),
+    ).toBe(true);
+  });
+});
+
+describe("text files", () => {
+  test("a .txt or .md is read as text, like stdin", () => {
+    const dir = folder("text-read", {
+      "notes.txt": Buffer.from(`a${ZWSP}b\n`),
+      "README.MD": Buffer.from("plain\n"),
+    });
+    const r = tellall([join(dir, "notes.txt")]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("notes.txt\n  This text has 1 hidden character.\n");
+    const md = tellall(["--json", join(dir, "README.MD")]);
+    expect(JSON.parse(md.out)[0]).toMatchObject({
+      format: "text",
+      headline: "No hidden characters.",
+    });
+  });
+
+  test("a .txt that is really a PNG is read as the image", () => {
+    const dir = folder("text-png", { "image.txt": CHATGPT });
+    const r = tellall([join(dir, "image.txt")]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("image.txt\n  This image says it was made by AI.");
+  });
+});
+
+describe("colour and the count line", () => {
+  // eslint-disable-next-line no-control-regex
+  const ESC = /\u001b\[/;
+
+  test("no colour when stdout isn't a terminal, or with NO_COLOR or --no-color", () => {
+    expect(tellall([CHATGPT, GPS]).out).not.toMatch(ESC);
+    const env = { FORCE_COLOR: "1", NO_COLOR: "1" };
+    expect(tellall([CHATGPT], { env }).out).not.toMatch(ESC);
+    expect(
+      tellall(["--no-color", CHATGPT], { env: { FORCE_COLOR: "1" } }).out,
+    ).not.toMatch(ESC);
+    expect(
+      tellall(["--json", CHATGPT], { env: { FORCE_COLOR: "1" } }).out,
+    ).not.toMatch(ESC);
+  });
+
+  test("FORCE_COLOR colours the name, the headline and the dots", () => {
+    const r = tellall([CHATGPT], { env: { FORCE_COLOR: "1" } });
+    expect(r.out).toContain("\u001b[1m");
+    expect(r.out).toContain(
+      "  \u001b[35mThis image says it was made by AI.\u001b[39m\n",
+    );
+    expect(r.out).toContain("  \u001b[35m·\u001b[39m Signed with");
+    // An info finding's dot stays plain.
+    expect(r.out).toContain("  · No location, camera");
+  });
+
+  test("a count line after two files or more, not after one or with --json", () => {
+    const two = tellall([CHATGPT, GPS]);
+    expect(
+      two.out.endsWith(
+        "\n\n2 files: 1 with an AI label and 1 with personal data.\n",
+      ),
+    ).toBe(true);
+    expect(tellall([CHATGPT]).out).not.toContain("files:");
+    expect(() =>
+      JSON.parse(tellall(["--json", CHATGPT, GPS]).out),
+    ).not.toThrow();
   });
 });
 
@@ -267,7 +384,7 @@ describe("clean: which files are inputs", () => {
     ]);
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
-    expect(r.out.split("Wrote ")).toHaveLength(3);
+    expect(r.out.match(/^ {2}Wrote /gm)).toHaveLength(2);
     expect(statSync(join(out, "d1/gps.clean.jpg")).isFile()).toBe(true);
     expect(statSync(join(out, "d2/gps.clean.jpg")).isFile()).toBe(true);
   });
@@ -478,7 +595,7 @@ describe("usage errors and help", () => {
     expect(lines[2]).toBe("Run tellall --help for all options.");
     expect(r.err).not.toContain("Exit codes");
     const c = tellall(["clean"]);
-    expect(c.err).toContain("tellall: name a file or folder to clean.");
+    expect(c.err).toContain("tellall: name a file, folder or - to clean.");
     expect(c.err).toContain("Usage: tellall clean [options]");
   });
 

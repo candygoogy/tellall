@@ -30,7 +30,7 @@ An image from Gemini gets the same headline, with a label signed by Google LLC t
 
 ## What it finds
 
-| In an image (JPEG, PNG, WebP, HEIC)                                    | In a text (pasted or piped in)                                                       |
+| In an image (JPEG, PNG, WebP, HEIC)                                    | In a text (pasted, piped in or saved as .txt or .md)                                 |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | AI labels (C2PA): signer, tool, time, watermark claim, signature check | Zero-width, tag and variation-selector characters, decoded when they spell something |
 | AI-source tag (IPTC DigitalSourceType)                                 | Direction controls and other invisible formatting                                    |
@@ -67,6 +67,8 @@ chatgpt-image.png
 gps.jpg
   Wrote gps.clean.jpg
   Removed location, camera and device details, dates and times, software names and other details: 951 bytes.
+
+Wrote 1 clean copy; 1 had nothing to remove.
 ```
 
 On the page, _Download clean copy_ saves one image, _Download all clean_ saves several as a zip, and _Copy clean text_ copies text without its hidden characters and formatted-copy extras.

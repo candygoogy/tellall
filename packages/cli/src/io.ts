@@ -153,6 +153,7 @@ const UTF16 = [
 export function decodeText(b: Uint8Array): {
   text: string;
   invalid: string | null;
+  encoding: "UTF-8" | "UTF-16";
 } {
   const [, , encoding] = UTF16.find(([x, y]) => b[0] === x && b[1] === y) ?? [
     0,
@@ -162,9 +163,9 @@ export function decodeText(b: Uint8Array): {
   const name = encoding === "utf-8" ? "UTF-8" : "UTF-16";
   try {
     const decoder = new TextDecoder(encoding, { fatal: true, ignoreBOM: true });
-    return { text: decoder.decode(b), invalid: null };
+    return { text: decoder.decode(b), invalid: null, encoding: name };
   } catch {
     const decoder = new TextDecoder(encoding, { ignoreBOM: true });
-    return { text: decoder.decode(b), invalid: name };
+    return { text: decoder.decode(b), invalid: name, encoding: name };
   }
 }
