@@ -62,6 +62,10 @@
     </div>
   </div>
   <div class="nav-sheet" id="nav-sheet" hidden>
+    <div class="sheet-actions">
+      <button class="btn btn-primary js-choose" type="button"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>Choose images</button>
+      <button class="btn btn-secondary js-paste" type="button"><svg class="ic" aria-hidden="true"><use href="#i-text"/></svg>Paste text</button>
+    </div>
     <a href="#labels">AI labels</a>
     <a href="#hidden">Hidden characters</a>
     <a href="#clean">Clean copy</a>
@@ -333,7 +337,7 @@
         <div class="net-map">
           <button class="icon-btn net-replay" id="net-replay" type="button" aria-label="Replay the diagram"><svg class="ic" aria-hidden="true"><use href="#i-replay"/></svg></button>
           <svg class="net-lines" id="net-lines" aria-hidden="true" preserveAspectRatio="none"></svg>
-          <div class="node node-file" id="node-file"><span class="node-k">Your file</span><span class="node-v">chatgpt-image.png</span></div>
+          <div class="node node-file" id="node-file"><span class="node-k">Your file</span><span class="node-v">photo.jpg</span></div>
           <div class="node node-tab" id="node-tab"><span class="node-k">This tab</span><span class="node-v">Worker running tellall's engine</span><span class="node-n">Files are read here and never leave it.</span></div>
           <div class="node node-out" id="node-out"><span class="node-k">On your screen</span><span class="node-v">Report and clean copy</span></div>
           <div class="node node-net" id="node-net"><span class="node-k">Network</span><span class="node-v"><code translate="no">connect-src 'none'</code></span><span class="node-v node-v-short">Blocked</span><span class="node-n">The page's own rules block any connection its code tries.</span></div>

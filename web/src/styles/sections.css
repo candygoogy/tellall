@@ -236,6 +236,8 @@
 .node-v-short { display: none; }
 .node-n { display: block; margin-top: 6px; font-size: var(--t-data); line-height: 1.45; color: var(--ink-3); white-space: normal; max-width: 15rem; }
 .node-file { left: 16%; top: 62%; }
+/* the visitor's own file name: one line, cut with an ellipsis (the whole name in its title) */
+.node-file .node-v { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; }
 .node-tab { left: 46%; top: 62%; border-color: rgb(var(--cursor-rgb) / 0.5); }
 .node-out { left: 78%; top: 62%; }
 .node-net { left: 46%; top: 16%; border-style: dashed; border-color: var(--ctl); background: var(--bg); }
@@ -261,6 +263,7 @@
   .node-v { white-space: normal; max-width: 9.5rem; }
   .node-n { display: none; }
   .node-file { left: 34%; top: 12%; }
+  .node-file .node-v { white-space: nowrap; max-width: 9.5rem; }
   .node-tab { left: 34%; top: 48%; }
   .node-out { left: 34%; top: 86%; }
   .node-net { left: 80%; top: 48%; max-width: 34%; }

@@ -18,9 +18,15 @@
 .nav-menu { display: none; height: 40px; padding: 0 14px; border-radius: var(--r-sm); background: transparent; border: 1px solid var(--ctl); font-size: var(--t-small); font-weight: 540; }
 .nav-sheet { position: absolute; top: var(--nav-h); left: 0; right: 0; background: var(--bg); border-bottom: 1px solid var(--hair-2); padding: 8px var(--gutter) 16px; display: grid; }
 .nav-sheet a { padding: 12px 4px; min-height: 44px; font-size: var(--t-body); color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--hair); }
+/* phones: the nav's own Choose images and Paste text live here, above the sections */
+.sheet-actions { display: none; }
+.sheet-actions .btn { height: 44px; padding: 0 12px; }
 @media (max-width: 1023px) {
   .nav-links, .nav-gh { display: none; }
   .nav-menu { display: inline-flex; align-items: center; }
 }
-@media (max-width: 479px) { .nav .nav-cta { display: none; } }
+@media (max-width: 479px) {
+  .nav .nav-cta { display: none; }
+  .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 0 12px; border-bottom: 1px solid var(--hair); }
+}
 

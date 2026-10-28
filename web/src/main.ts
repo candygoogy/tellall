@@ -65,7 +65,8 @@ function initNav(): void {
     sheet.hidden = !open;
     menu.textContent = open ? "Close" : "Menu";
   });
-  $$("a", sheet).forEach((a) => a.addEventListener("click", close));
+  // A section, GitHub, or Choose images / Paste text: the sheet closes.
+  $$("a, button", sheet).forEach((a) => a.addEventListener("click", close));
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !sheet.hidden) {
       close();

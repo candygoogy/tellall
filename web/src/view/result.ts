@@ -107,6 +107,17 @@ const view = () => $("#r-view");
 /** The visitor's own files and texts, newest first. */
 export const live: Item[] = [];
 export let current: Item = FIRST;
+
+/** Told whenever "Your files" changes: a file or text in, out, cleared or
+ * back with Undo. */
+const liveWatchers: (() => void)[] = [];
+export const onLiveChange = (fn: () => void) => {
+  liveWatchers.push(fn);
+};
+/** The name of the visitor's newest file (a text has none), or photo.jpg
+ * until there is one. */
+export const latestFileName = () =>
+  live.find((x) => x.kind === "file")?.name ?? "photo.jpg";
 let readingTL: gsap.core.Timeline | null = null;
 let pinned: number | null = null;
 
@@ -1048,6 +1059,7 @@ function syncGroup(): void {
   const files = live.filter((x) => x.kind === "file");
   const done = files.filter((x) => x.state === "done" && x.cleanBlob);
   $("#dl-all").hidden = files.length < 2 || done.length < 2;
+  for (const fn of liveWatchers) fn();
 }
 
 /** The sidebar's "Your files": each row made once, its dot kept current. */

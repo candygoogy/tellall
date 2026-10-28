@@ -6,9 +6,29 @@ import examples from "virtual:examples";
 import { $, $$, esc, tabs } from "../dom.ts";
 import { copyWith, setRest } from "../feedback.ts";
 import { FADE, G, ScrollTrigger, fadeIn, motion } from "../motion.ts";
+import { latestFileName, onLiveChange } from "./result.ts";
 
+/** What the window types: the ChatGPT example's command, as its printed
+ * report is that file's. */
 const CLI_CMD = `npx tellall ${examples.files.chatgpt.name}`;
 const AGENT_CMD = "/plugin install tellall --marketplace candygoogy/tellall";
+
+/** A file name as one shell word (the engine's own rule, words/en.ts): as
+ * it is when that's safe, else in single quotes, a quote inside written as
+ * '\''. A name that starts with "-" gets "./" first. */
+function shellWord(file: string): string {
+  const name = file.startsWith("-") ? `./${file}` : file;
+  if (/^[\w.,+@%/:=-]+$/.test(name)) return name;
+  return `'${name.replace(/'/g, "'\\''")}'`;
+}
+
+/** What Copy command copies: the command for the visitor's newest file,
+ * or for photo.jpg until there is one. */
+const copiedCmd = () => `npx tellall ${shellWord(latestFileName())}`;
+const copied = () => (termKey === "cli" ? copiedCmd() : AGENT_CMD);
+/** The copy button's tooltip says what it copies, as the window shows
+ * the example's command. */
+const titleCopy = () => ($("#term-copy").title = copied());
 
 interface Line {
   cls: string;
@@ -126,6 +146,7 @@ function render(animate: boolean): void {
   const caret = $(".caret", body);
   const out = $$(".t-line", body);
   setRest($("#term-copy"), isCli ? "Copy command" : "Copy install command");
+  titleCopy();
   if (!animate || !motion()) {
     cmdEl.textContent = cmd;
     caret.remove();
@@ -170,10 +191,11 @@ export function initTerm(): void {
     const cli = termKey === "cli";
     void copyWith(
       copy,
-      cli ? CLI_CMD : AGENT_CMD,
+      copied(),
       cli ? "Copied the command." : "Copied the install command.",
     );
   });
+  onLiveChange(titleCopy);
 }
 
 export function termScenes(): void {

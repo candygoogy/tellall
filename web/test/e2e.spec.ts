@@ -1123,3 +1123,65 @@ test("reduced motion: no replay buttons, as there's nothing to replay", async ({
   await page.locator("#privacy").scrollIntoViewIfNeeded();
   await expect(page.locator("#net-replay")).toBeVisible();
 });
+
+test("390 px: the menu leads with Choose images and Paste text, and closes when one is used", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?still");
+  const menu = page.locator(".nav-menu");
+  const sheet = page.locator("#nav-sheet");
+  const choose = sheet.getByRole("button", { name: "Choose images" });
+  const text = sheet.getByRole("button", { name: "Paste text" });
+  await menu.click();
+  for (const b of [choose, text]) {
+    await expect(b).toBeVisible();
+    expect((await b.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  }
+  // Above the sections.
+  const top = (await choose.boundingBox())?.y ?? Infinity;
+  expect(top).toBeLessThan(
+    (await sheet.locator("a").first().boundingBox())?.y ?? 0,
+  );
+  const picker = page.waitForEvent("filechooser");
+  await choose.click();
+  await picker;
+  await expect(sheet).toBeHidden();
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await menu.click();
+  await text.click();
+  await expect(sheet).toBeHidden();
+  await expect(page.locator("#paste-area")).toBeVisible();
+});
+
+test("your file's name: the privacy diagram shows it, and Copy command copies its command", async ({
+  page,
+  context,
+  browserName,
+}) => {
+  if (browserName === "chromium")
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/?still");
+  const node = page.locator("#node-file .node-v");
+  const copy = page.locator("#term-copy");
+  await expect(node).toHaveText("photo.jpg");
+  await drop(page, [fixtureDrop("photo/gps.jpg", "image/jpeg")]);
+  await readerShows(page, "gps.jpg");
+  await expect(node).toHaveText("gps.jpg");
+  await expect(node).toHaveAttribute("title", "gps.jpg");
+  await expect(copy).toHaveAttribute("title", "npx tellall gps.jpg");
+  // The window still types the example's command, whose output it prints.
+  await expect(page.locator("#term-body .t-cmd")).toHaveText(
+    "npx tellall chatgpt-image.png",
+  );
+  await withClipboard(async () => {
+    await copy.click();
+    await expect(copy.locator("span")).toHaveText("Copied");
+    if (windowsWebKit(browserName)) return;
+    expect((await pasteBack(page)).text).toBe("npx tellall gps.jpg");
+  });
+  // Out of the list: back to photo.jpg.
+  await page.getByRole("button", { name: "Remove gps.jpg from list" }).click();
+  await expect(node).toHaveText("photo.jpg");
+  await expect(copy).toHaveAttribute("title", "npx tellall photo.jpg");
+});

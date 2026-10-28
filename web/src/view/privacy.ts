@@ -4,6 +4,7 @@
 // send one, so the visitor sees the page's own rules stop it.
 import { $, $$, fmt } from "../dom.ts";
 import { FADE, G, ScrollTrigger, motion, reduceMQ } from "../motion.ts";
+import { latestFileName, onLiveChange } from "./result.ts";
 
 interface Box {
   x: number;
@@ -209,8 +210,21 @@ function recount(): void {
   $("#req-count").textContent = fmt(count);
 }
 
+/** "Your file" is the visitor's newest file, once there is one; the lines
+ * are drawn again when its width changes. */
+function nameFile(): void {
+  const v = $("#node-file .node-v");
+  const name = latestFileName();
+  if (v.textContent === name) return;
+  v.textContent = name;
+  v.title = name;
+  if (geo) geo = drawLines();
+}
+
 export function initPrivacy(): void {
+  nameFile();
   layoutNet();
+  onLiveChange(nameFile);
   let resizeT = 0;
   addEventListener("resize", () => {
     clearTimeout(resizeT);
